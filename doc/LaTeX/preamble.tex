@@ -1,0 +1,31 @@
+\documentclass[a4paper, oneside]{book}
+
+\input{\string~/texrc.tex}
+
+\geometry{tmargin=2cm, rmargin=2cm, bmargin=2cm, lmargin=2cm}
+
+\def\defn{Definition}
+\def\axiom{Axiom}
+\def\remark{Remarks}
+\def\propos{Proposition}
+\def\lemma{Lemma}
+\def\example{Example}
+\def\theorem{Theorem}
+
+\def\true{{True}}
+
+\newtheorem{theorem_root}{\defn}[chapter]
+\newtheorem{example_root}{\example}[chapter]
+
+
+\makeatletter
+
+\def\checkcc#1{%
+    \IfFileExists{\jobname-#1.asy}{
+        \IfFileExists{\jobname-#1.pdf}{\relax}%
+        {\immediate\write18{asy -noV \jobname-#1.asy}}
+    }{\relax}
+}
+
+\def\refto#1#2{{(\tt#2\nobreak\ \ref{#1})}}
+\makeatother
