@@ -1,2 +1,10 @@
 # LaTeX
+*.pdf
+*.aux
 *.log
+*.idx
+*.ind
+*.ilg
+*.pre
+*.toc
+*.dict
