@@ -1,16 +1,15 @@
 #if !defined(MODEL_HPP)
 #define MODEL_HPP
 
-// debug symbol  MODEL_DEBUG
-#define MODEL_DEBUG
-
 #include<vector>
+#include<stack>
+#include<algorithm>
 
 #include<cmath>
-#include<exception>
-#include<stdexcept>
 
 #include "./unit.hpp"
+#include "../utils/exception.hpp"
+#include "force.hpp"
 
 #define UNIT_IS_E(s) \
     (strncmp(s._unit_, "\377\1\376\0\0\0\0\0", NUMBER_OF_UNIT) == 0)
@@ -22,16 +21,6 @@
     (strncmp(s._unit_, "\3\1\377\0\0\0\0\0", NUMBER_OF_UNIT) == 0)
 
 namespace SMSolver{
-
-    struct SMSolverException: std::exception{
-        private:
-            const char* msg;
-        public:
-            SMSolverException(std::string& s):msg(s.c_str()){}
-            SMSolverException(const char* s):msg(s){}
-            virtual const char* what() const noexcept {return msg;}
-    };
-
     template<typename DT> class  SMSolverManager;
     template<typename DT> class  Beam;
 
@@ -49,7 +38,7 @@ namespace SMSolver{
      * node should contain a vector to store these beam's pointer.
      */
     template<typename DT>
-    class Node{
+    class Node { //{
         public:
             typedef basic_length<DT> length_type;
         private:
@@ -58,7 +47,10 @@ namespace SMSolver{
             length_type _y;
             std::vector<Beam<DT>*> m_connected_beams;
             NodeID m_id;
+            BasicLoad<DT> m_load;
         public:
+            SMSolverManager<DT>* solverManager;
+
             Node() = delete;
             void add_connected(Beam<DT>* b){
                 m_connected_beams.push_back(b);
@@ -69,8 +61,19 @@ namespace SMSolver{
             auto beams_end(){
                 return m_connected_beams.end();
             }
-            SMSolverManager<DT>* solverManager;
             void setSupport(const BasicSupport& sp){this->_support = sp;}
+            void setLoad(const BasicLoad<DT>& load){
+                if(!load.is_point_load)
+                    throw *new SMSolverException("Load for a Node must be a point load.");
+                this->m_load = load;
+                return;
+            }
+            cvector<basic_unit<DT>> getTheP(){
+                cvector<basic_unit<DT>> ret(2);
+                ret[0] = m_load.load.m_point_load.value * ::cos(m_load.load.m_point_load.direction);
+                ret[1] = m_load.load.m_point_load.value * ::sin(m_load.load.m_point_load.direction);
+                return ret;
+            }
 
         private:
             friend class SMSolverManager<DT>;
@@ -78,16 +81,18 @@ namespace SMSolver{
             explicit Node(SMSolverManager<DT>* mg, length_type& x, length_type& y, NodeID id): 
                 _x(x), _y(y), 
                 m_id(id),
-                solverManager(mg){}
+                m_load(BasicLoad<DT>::ZERO_LOAD),
+                solverManager(mg)
+            {}
             Node(Node<DT>&) = delete;
             Node(Node<DT>&&) = delete;
             Node& operator=(Node<DT>& ) = delete;
             Node& operator=(Node<DT>&&) = delete;
             ~Node() = default;
-    };
+    }; //} class template Node<T>
 
     template<typename DT>
-    class Beam{
+    class Beam { //{
         public:
             SMSolverManager<DT>* solverManager;
         private:
@@ -97,6 +102,26 @@ namespace SMSolver{
             basic_unit<DT> _E;
             basic_unit<DT> _I;
             basic_unit<DT> _A;
+            BasicLoad<DT> m_load;
+
+            struct __beam_static_contructor {
+                cvector<basic_unit<DT>> ZERO_REACTION_VECTOR;
+                cvector<DT>             ZERO_REACTION_VECTOR_METRIC;
+                __beam_static_contructor(): ZERO_REACTION_VECTOR(6), ZERO_REACTION_VECTOR_METRIC(6){
+                    basic_unit<DT> __v = 0;
+                    __v.setUnit(1, 1, -2);
+                    ZERO_REACTION_VECTOR[1] = __v;
+                    ZERO_REACTION_VECTOR[2] = __v;
+                    ZERO_REACTION_VECTOR[4] = __v;
+                    ZERO_REACTION_VECTOR[5] = __v;
+                    __v.setUnit(2, 1, -2);
+                    ZERO_REACTION_VECTOR[3] = __v;
+                    ZERO_REACTION_VECTOR[6] = __v;
+
+                    ZERO_REACTION_VECTOR_METRIC.set([](size_t) -> DT {return 0;});
+                }
+            };
+            static __beam_static_contructor static_member;
 
             void check_UNIT(){
                 if(std::get<1>(this->m_firstNode) == Connector::ElasticHingeConnect &&
@@ -133,29 +158,131 @@ namespace SMSolver{
             Beam& operator=(Beam<DT>& ) = delete;
             Beam& operator=(Beam<DT>&&) = delete;
 
-            explicit Beam(SMSolverManager<DT>* mg, NodeID& i_f, NodeID& i_s,
-                    Connector c_f, Connector c_s,
-                    BeamID id,
-                    basic_unit<DT> b_E, 
-                    basic_unit<DT> b_A, 
-                    basic_unit<DT> b_I
+            explicit Beam(SMSolverManager<DT>* mg, const NodeID& i_f, const NodeID& i_s,
+                    const Connector& c_f, const Connector& c_s,
+                    const BeamID& id,
+                    const basic_unit<DT>& b_E, 
+                    const basic_unit<DT>& b_A, 
+                    const basic_unit<DT>& b_I,
+                    const BasicLoad<DT>& load = BasicLoad<DT>::ZERO_LOAD
                 ): 
                 solverManager(mg),
                 m_firstNode (std::tuple<NodeID, Connector, basic_unit<DT>>(i_f, c_f, 0)),
                 m_secondNode(std::tuple<NodeID, Connector, basic_unit<DT>>(i_s, c_s, 0)),
                 m_id(id),
-                _E(b_E), _I(b_I), _A(b_A){
+                _E(b_E), _I(b_I), _A(b_A), 
+                m_load(load){
                     check_UNIT();
                 }
 
+            void setLoad(const BasicLoad<DT>& load){
+                this->m_load = load;
+                return;
+            }
+
             smatrix<DT> getTransformMatrix();
             smatrix<DT> getReverseTransformMatrix();
-            smatrix<DT> getLocalRigidMatrix();
-            smatrix<DT> getGlobalRigidMatrix();
-    };
+            smatrix<basic_unit<DT>> getLocalRigidMatrix();
+            smatrix<DT> getLocalRigidMatrixMetric();
+            smatrix<DT> getGlobalRigidMatrixMetric();
+
+            cvector<basic_unit<DT>> getLocalPVector();
+            cvector<DT> getLocalPVectorMetric();
+            cvector<basic_unit<DT>> getGlobalPVector();
+            cvector<DT> getGlobalPVectorMetric();
+            cvector<uint32_t> getLocalGlobalMap();
+    }; //} class template Beam<T>
+// member function of class template Beam<T> //{
+template<typename DT>
+    typename Beam<DT>::__beam_static_contructor Beam<DT>::static_member;
+
+/* 
+ * Result of this function is reaction to the virtual contraint, let 
+ * final result of this ideas as P = result. 
+ * And set final rigid matrix to K, the solved displacement as Delta.
+ * It will has following relation:
+ * -(K * Delta) + P = 0    <==>    K * Delta = P
+ */
+template<typename DT>
+    cvector<basic_unit<DT>> Beam<DT>::getLocalPVector(){ //{ 
+        if(this->m_load.isZero()){
+#if defined(MODEL_DEBUG)
+            std::cout << "BeamID <" << this->m_id << "> hasn't load" << std::endl;
+#endif
+            return Beam<DT>::static_member.ZERO_REACTION_VECTOR;
+        }
+        cvector<basic_unit<DT>> ret(6);
+        basic_unit<DT> len = this->getLength();
+        if(this->m_load.is_point_load){
+            basic_unit<DT> F = this->m_load.load.m_point_load.value;
+            DT         angle = this->m_load.load.m_point_load.direction;
+            DT    percentage = this->m_load.load.m_point_load.percentage;
+#if defined(MODEL_DEBUG)
+            std::cout << "--------------------------" << std::endl;
+            std::cout << "BeamId:" << this->m_id << std::endl;
+            std::cout << "Point Load is:" << F << std::endl;
+            std::cout << "Point Load angle:" << angle << std::endl;
+            std::cout << "Point Load position:" << percentage << std::endl;
+#endif // MODEL_DEBUG
+            ret[1] = (F * ::sin(angle)) / 2.0;
+            ret[4] = ret[1];
+            ret[2] = -1.0 * F * pow((1 - percentage), 2) * (1 + 2 * percentage) * ::cos(angle);
+            ret[5] = -1.0 * (F + ret[2]) * ::cos(angle);
+            ret[3] = -1.0 * F * percentage * pow(1 - percentage, 2) * len * ::cos(angle);
+            ret[6] = F * pow(percentage, 2) * (1 - percentage) * len * ::cos(angle);
+            return ret;
+        } else {
+            basic_unit<DT> F = this->m_load.load.m_distributed_load.value;
+            DT         angle = this->m_load.load.m_distributed_load.direction;
+#if defined(MODEL_DEBUG)
+            std::cout << "--------------------------" << std::endl;
+            std::cout << "BeamId:" << this->m_id << std::endl;
+            std::cout << "Distributed Load is:" << F << std::endl;
+            std::cout << "Distributed Load angle:" << angle << std::endl;
+#endif // MODEL_DEBUG
+            ret[1] = F * ::sin(angle) * len / 2.0;
+            ret[4] = ret[1];
+            ret[2] = -1.0 * F * ::cos(angle) * len / 2.0;
+            ret[5] = ret[2];
+            ret[3] = F * len * len * ::cos(angle) / (-12.0);
+            ret[6] = -1.0 * ret[3];
+#if defined(MODEL_DEBUG)
+            std::cout << "FINAL P RESULT:" << ret.toString() << std::endl;
+            std::cout << "--------------------------" << std::endl;
+#endif // MODEL_DEBUG
+            return ret;
+        }
+    } //}
+template<typename DT>
+    cvector<DT> Beam<DT>::getLocalPVectorMetric(){ //{
+        cvector<basic_unit<DT>> raw_result = this->getLocalPVector();
+#if defined(MODEL_DEBUG)
+        std::cout << "Raw result of localPVector: " << std::endl;
+        std::cout << raw_result.toString() << std::endl;
+#endif
+        cvector<DT> ret(6);
+        for(size_t i=1; i<=6;i++)
+            ret[i] = raw_result[i];
+        return ret;
+    } //}
+template<typename DT>
+    cvector<DT> Beam<DT>::getGlobalPVectorMetric(){ //{
+        auto _lll = this->getLocalPVectorMetric();
+        auto _ttt = this->getTransformMatrix();
+        cvector<DT> ret = _ttt * _lll;
+        return ret;
+    } //}
+template<typename DT>
+    cvector<uint32_t> Beam<DT>::getLocalGlobalMap(){ //{
+        cvector<uint32_t> ret(6);
+        for(size_t i = 1; i<=6; i++){
+            ret[i] = this->m_id * 6 + i;
+        }
+        return ret;
+    } //}
 
 template<typename DT>
-smatrix<DT> __transformM(const DT& value)
+smatrix<DT> __transformM(const DT& value) //{
 {
     smatrix<DT> ret(6);
     ret.set([](size_t, size_t) -> DT{return 0;});
@@ -170,20 +297,21 @@ smatrix<DT> __transformM(const DT& value)
     ret.set(4, 5,-::sin(value));
     ret.set(5, 4, ::sin(value));
     return ret;
-}
-template<typename DT>
-smatrix<DT> Beam<DT>::getTransformMatrix()
-{
-    return __transformM(this->getTheta());
-}
-template<typename DT>
-smatrix<DT> Beam<DT>::getReverseTransformMatrix()
-{
-    return __transformM(-this->getTheta());
-}
+} //}
 
 template<typename DT>
-smatrix<DT> Beam<DT>::getLocalRigidMatrix()
+smatrix<DT> Beam<DT>::getTransformMatrix() //{
+{
+    return __transformM(this->getTheta());
+} //}
+template<typename DT>
+smatrix<DT> Beam<DT>::getReverseTransformMatrix() //{
+{
+    return __transformM(-this->getTheta());
+} //}
+
+template<typename DT>
+smatrix<basic_unit<DT>> Beam<DT>::getLocalRigidMatrix() //{
 {
     smatrix<basic_unit<DT>> enheng(6);
     smatrix<DT> ret   (6);
@@ -216,34 +344,43 @@ smatrix<DT> Beam<DT>::getLocalRigidMatrix()
             return _this->get(i - 3, j + 3);
             return _this->get(i - 3, j - 3);
             });
+    return enheng;
+} //}
+template<typename DT>
+smatrix<DT> Beam<DT>::getLocalRigidMatrixMetric() //{
+{
+    auto enheng = this->getLocalRigidMatrix();
+    smatrix<DT> ret(enheng.get_size());
     SMSolver::mapMatrix<typename decltype(enheng)::dataType,
         typename decltype(ret)::dataType>(
                 enheng, ret, [](const basic_unit<DT>& x) -> DT {
                 return x.value * x.ratio;
                 });
     return ret;
-}
+} //}
 
 template<typename DT>
-smatrix<DT> Beam<DT>::getGlobalRigidMatrix()
+smatrix<DT> Beam<DT>::getGlobalRigidMatrixMetric() //{
 {
-    smatrix<DT> loc    = this->getLocalRigidMatrix();
+    smatrix<DT> loc    = this->getLocalRigidMatrixMetric();
     smatrix<DT> Trans  = this->getTransformMatrix();
     smatrix<DT> RTrans = this->getReverseTransformMatrix();
     auto ret = Trans * loc * RTrans;
 #if defined(MODEL_DEBUG)
-    std::cout << "local rigid Matrix:" << std::endl;
+    std::cout << "local rigid Matrix(metric):" << std::endl;
     std::cout << loc.toString();
     std::cout << "Transform Matrix:" << std::endl;
     std::cout << Trans.toString();
-    std::cout << "result Matrix:" << std::endl;
+    std::cout << "result Matrix:(metric)" << std::endl;
     std::cout << ret.toString() << std::endl;
 #endif
     return ret;
-}
+} //}
+
+//} member function of class template Beam<T>
 
 template<typename DT>
-class SMSolverManager {
+class SMSolverManager { //{
     private:
         std::vector<Beam<DT>*> beams;
         std::vector<Node<DT>*> nodes;
@@ -286,19 +423,19 @@ class SMSolverManager {
             n2->m_connected_beams.push_back(new_beam);
             return m_beamIdCount;
         }
-        smatrix<DT> __getMetricRigid(){
+
+        smatrix<DT> __getMetricRigidMetric(){ //{
             size_t __order = m_beamIdCount * 6;
             smatrix<DT> ret(__order);
             ret.set([](size_t, size_t) -> typename decltype(ret)::dataType {return 0;});
             for(size_t i = 0; i<m_beamIdCount; i++){
                 Beam<DT>* xbeam = beams[i];
-                auto ins = xbeam->getGlobalRigidMatrix();
+                auto ins = xbeam->getGlobalRigidMatrixMetric();
                 ret.insert_submatrix(ins, i * 6 + 1);
             }
             return ret;
-        }
-
-        std::vector<std::tuple<uint32_t, Connector, basic_unit<DT>>> __handleNodePtr2(const Node<DT>* ptr){
+        } //}
+        std::vector<std::tuple<uint32_t, Connector, basic_unit<DT>>> __handleNodePtr2(const Node<DT>* ptr){ //{
             std::vector<std::tuple<uint32_t, Connector, basic_unit<DT>>> ret;
             for(auto x = ptr->m_connected_beams.begin(); x != ptr->m_connected_beams.end(); x++){
                 Beam<DT>* b = *x;
@@ -312,10 +449,8 @@ class SMSolverManager {
                                                   std::get<1>(b->m_secondNode)));
             }
             return ret;
-        }
-
-
-        std::vector<std::pair<uint32_t, Connector>> __handleNodePtr(const Node<DT>* ptr){
+        } //}
+        std::vector<std::pair<uint32_t, Connector>> __handleNodePtr(const Node<DT>* ptr){ //{
             std::vector<std::pair<uint32_t, Connector>> ret;
             for(auto x = ptr->m_connected_beams.begin(); x != ptr->m_connected_beams.end(); x++){
                 Beam<DT>* b = *x;
@@ -325,14 +460,15 @@ class SMSolverManager {
                     ret.push_back(std::make_pair((b->m_id - 1) * 6 + 4, std::get<1>(b->m_secondNode)));
             }
             return ret;
-        }
-
-        void __traversing_reduce(smatrix<DT>& M)
+        } //}
+        void __traversing_reduce(smatrix<DT>& M) //{
         {
+#if defined(MODEL_DEBUG)
             uint32_t z = 1;
             for(auto x = map_list.begin(); x!=map_list.end(); x++, z++){
                 std::cout << z << ": " << *x << std::endl;
             }
+#endif
             if(M.get_size() != map_list.size())
                 throw *new SMSolverException("__traversing_reduce unmatch size");
             uint32_t n = M.get_size();
@@ -342,15 +478,81 @@ class SMSolverManager {
                 }
             }
             n = M.get_size();
+            std::vector<uint32_t> delete_s;
             for(auto x = map_list.rbegin(); x!=map_list.rend(); x++, n--){
                 if(*x != n)
-                    M.delete_colrow(n);
+                    delete_s.push_back(n);
             }
+            std::sort(delete_s.begin(), delete_s.end(), [](uint32_t a, uint32_t b) -> bool {return a<=b;});
+            for(auto x = delete_s.rbegin(); x!=delete_s.rend(); x++)
+                M.delete_colrow(*x);
+        } //}
+        void __traversing_reduce_cvector(cvector<DT>& V) //{
+        {
+            if(V.get_size() != map_list.size())
+                throw *new SMSolverException("__traversing_reduce_cvector unmatch size");
+            uint32_t n = V.get_size();
+            for(auto x = map_list.rbegin(); x!=map_list.rend(); x++, n--){
+                if(n != *x && *x != 0){
+                    V[*x] += V[n - 1];
+                }
+            }
+            n = V.get_size();
+            std::vector<uint32_t> delete_s;
+            for(auto x = map_list.rbegin(); x!=map_list.rend(); x++, n--){
+                if(*x != n){
+                    delete_s.push_back(n);
+                }
+            }
+            std::sort(delete_s.begin(), delete_s.end(), [](uint32_t a, uint32_t b) -> bool {return a<=b;});
+            for(auto x = delete_s.rbegin(); x!= delete_s.rend(); x++)
+                V.delete_elem(*x);
+        } //}
+cvector<DT> __getMetricP() //{
+{
+    cvector<DT> ret(this->m_beamIdCount * 6);
+    for(size_t i = 1; i<=this->m_beamIdCount; i++){
+        cvector<DT> __t = this->getBeam(i)->getLocalPVectorMetric();
+#if defined(MODEL_DEBUG)
+        std::cout << "STAGED result, P of BeamID: " << this->getBeam(i)->m_id << std::endl;
+        std::cout << __t.toString() << std::endl;
+#endif
+        for(size_t j = 1; j<=6; j++)
+            ret[(i-1) * 6 + j] = __t[j];
+    }
+    for(size_t i = 1; i<=this->m_nodeIdCount; i++){
+        Node<DT>* __n = this->getNode(i);
+        if(__n->m_load.isZero() || __n->m_connected_beams.size() == 0)
+            continue;
+        Beam<DT>* __b = __n->m_connected_beams[0];
+        DT __fx       = __n->m_load.load.m_point_load.value * ::cos(__n->m_load.load.m_point_load.direction);
+        DT __fy       = __n->m_load.load.m_point_load.value * ::sin(__n->m_load.load.m_point_load.direction);
+        if(std::get<0>(__b->m_firstNode) == i){
+            ret[(__b->m_id - 1) * 6 + 1] += __fx;
+            ret[(__b->m_id - 1) * 6 + 2] += __fy;
+        } else {
+            ret[(__b->m_id - 1) * 6 + 4] += __fx;
+            ret[(__b->m_id - 1) * 6 + 5] += __fy;
         }
+    }
+    return ret;
+} //}
 
-        smatrix<DT> getMetricRigid(){ // don't consider Force 
+cvector<DT> getMetricP() //{
+{
+    cvector<DT> ret = __getMetricP();
+#if defined(MODEL_DEBUG)
+    std::cout << "Intermeidate Result of P:" << std::endl;
+    std::cout << ret.toString() << std::endl;
+#endif
+    __traversing_reduce_cvector(ret);
+    return ret;
+} //}
+
+        smatrix<DT> getMetricRigidMetric() // don't consider Force //{
+        {
             std::vector<Node<DT>*> fixed_beam;
-            smatrix<DT> interResult = __getMetricRigid();
+            smatrix<DT> interResult = __getMetricRigidMetric();
             map_list.resize(interResult.get_size());
             for(size_t i = 0; i<map_list.size(); i++) // initial states
                 map_list[i] = i + 1;
@@ -459,10 +661,12 @@ class SMSolverManager {
             // traversing the nodes, store reduction information into map_list: vector<>
             __traversing_reduce(interResult);
             return interResult;
-        }
-};
+        } //}
+}; //} class tempalte SMSolverManager<T>
 
 template class SMSolverManager<double>;
+template class Beam<double>;
+template class Node<double>;
 } // namespace SMSolver
 
 #endif

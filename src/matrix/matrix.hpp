@@ -1,22 +1,18 @@
 #if !defined(MATRIX_HPP)
 #define MATRIX_HPP
 
-#include<vector>
 #include<cstdlib>
 #include<limits>
 #include<cmath>
-
-#include<iterator>
-
 #include<cassert>
+
+#include<vector>
+#include<iterator>
 #include<iomanip>
-
 #include<sstream>
-
-#include<exception>
-#include<stdexcept>
-
 #include<iostream>
+
+#include "../utils/exception.hpp"
 
 #define GAUSS_ITERATION_DONT_CONVERGE \
     throw std::out_of_range("gauss iteration don't converge...");
@@ -651,6 +647,8 @@ namespace SMSolver {
                 cvector<DT>  operator- (const cvector<DT>& x) const {CONV_SELF_OP(-=, x);}
                 cvector<DT>  operator+ (const cvector<DT>& x) const {CONV_SELF_OP(+=, x);}
 
+                size_t get_size(){return this->len;}
+
                 inline
                     dataType get(size_t i) const
                     {
@@ -696,7 +694,19 @@ namespace SMSolver {
                 }
                 void set(dataType (*)(size_t));
                 void set(dataType (*)(size_t, const dataType&));
+
+                void delete_elem(size_t);
         }; //} class template cvector<T> declaration
+
+    template<typename DT>
+    void cvector<DT>::delete_elem(size_t i){
+        if(i > this->len || i == 0)
+            throw *new SMSolverException("cvector<DT>::delete_elem(size_t i): require <i>"
+                                         "is less equal with length of cvecotr, and greater than 0.");
+        this->data->erase(this->data->begin() + (i - 1));
+        this->len-- ;
+        return;
+    }
 
     template<typename DT>
         void cvector<DT>::set(dataType (*cal_func)(size_t)) //{
@@ -726,24 +736,23 @@ namespace SMSolver {
         } //}
 
     template<typename DT>
-                cvector<DT>& cvector<DT>::operator+=(const cvector<DT>& o)
-                {
-                    if(o.len != this->len)
-                        UNMATCH_MATRIX_SIZE;
-                    for(size_t i = 1; i<=this->len; i++)
-                        (*this)[i] += o[i];
-                    return (*this);
-                }
+    cvector<DT>& cvector<DT>::operator+=(const cvector<DT>& o) //{
+    {
+        if(o.len != this->len)
+            UNMATCH_MATRIX_SIZE;
+        for(size_t i = 1; i<=this->len; i++)
+            (*this)[i] += o[i];
+        return (*this);
+    } //}
     template<typename DT>
-                cvector<DT>& cvector<DT>::operator-=(const cvector<DT>& o)
-                {
-                    if(o.len != this->len)
-                        UNMATCH_MATRIX_SIZE;
-                    for(size_t i = 1; i<=this->len; i++)
-                        (*this)[i] -= o[i];
-                    return (*this);
-                }
-
+    cvector<DT>& cvector<DT>::operator-=(const cvector<DT>& o) //{
+    {
+        if(o.len != this->len)
+            UNMATCH_MATRIX_SIZE;
+        for(size_t i = 1; i<=this->len; i++)
+            (*this)[i] -= o[i];
+        return (*this);
+    } //}
 
     template<typename DT>
         cvector<DT>& cvector<DT>::operator=(const cvector<DT>& other) //{

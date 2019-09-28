@@ -1,15 +1,15 @@
 #if !defined(UNIT_HPP)
 #define UNIT_HPP
 
-#include "../matrix/matrix.hpp"
 #include<iostream>
 #include<iosfwd>
 #include<sstream>
-#include<exception>
-#include<stdexcept>
 
 #include<cstdlib>
 #include<cstring>
+
+#include "../matrix/matrix.hpp"
+#include "../utils/exception.hpp"
 
 namespace SMSolver {
 
@@ -106,21 +106,18 @@ namespace SMSolver {
 
         public:
             typedef DT dataType;
-            basic_unit(){memset(this->_unit_, '\0', NUMBER_OF_UNIT);};
+            constexpr basic_unit():value(1), ratio(1), Rep(""){memset(this->_unit_, '\0', NUMBER_OF_UNIT);};
+//            basic_unit() = default;
 
-            basic_unit(const dataType& x){ //{
+            basic_unit(const dataType& x): Rep(""){ //{
                 memset(this->_unit_, '\0', NUMBER_OF_UNIT);
                 this->value = x;
                 this->ratio = 1;
             } //} convertion constructor
             constexpr basic_unit(const dataType& x,
                                  const dataType& y,
-                                 const std::string& z){
-                memset(this->_unit_, '\0', NUMBER_OF_UNIT);
-                this->ratio = y;
-                this->Rep   = z;
-                this->value = x;
-            }
+                                 const std::string& z):value(x), ratio(y), Rep(z)
+            {memset(this->_unit_, '\0', NUMBER_OF_UNIT);}
 
             basic_unit(const basic_unit&  x){(*this) = static_cast<const basic_unit& >(x);}
             basic_unit(const basic_unit&& x){(*this) = static_cast<const basic_unit&&>(x);}
@@ -146,6 +143,9 @@ namespace SMSolver {
             virtual DT toStandard(const DT&){return this->value * this->ratio;}
             virtual void fromStandard(const basic_unit<DT>& x){this->value = x.ratio * x.value;}
 
+            // conversion operator
+            inline operator DT(){return this->value * this->ratio;}
+
             virtual std::string presentString() const{ //{
                 std::ostringstream ss;
                 ss << std::setprecision(2) << this->value;
@@ -153,6 +153,37 @@ namespace SMSolver {
                 return (s + this->Rep);
             } //} presentString();
     }; //} end class template basic_unit<T> 
+
+// define some basic unit
+
+template<typename DT>
+struct BasicUnit  //{
+{
+    basic_unit<DT> m;
+    basic_unit<DT> mm;
+    basic_unit<DT> kg;
+    basic_unit<DT> s;
+    basic_unit<DT> g;
+    basic_unit<DT> N;
+    basic_unit<DT> KN;
+    basic_unit<DT> Pa;
+    basic_unit<DT> KPa;
+    BasicUnit(){
+        basic_unit<DT> __t(1, 1, "temp");
+        m = __t; kg = __t; s = __t;
+        m .setUnit(1);         m.Rep = "m";
+        mm = 0.001 * m;      mm.Rep = "mm";
+        kg.setUnit(0, 1);     kg.Rep = "kg";
+        g  = 0.001 * kg;      g.Rep = "g";
+        s .setUnit(0, 0, 1);   s.Rep = "s";
+        N = kg * m / (s * s);  N.Rep = "N";
+        KN = 1000.0 * N;      KN.Rep = "KN";
+        Pa = N / (m * m);     Pa.Rep = "Pa";
+        KPa = 1000.0 * Pa;   KPa.Rep = "Kpa";
+    }
+};
+const BasicUnit<double> BUnit;
+//} basic unit
 
 // non-member function operator for basic_unit<T> class template //{
     template<typename DT>
@@ -232,7 +263,8 @@ namespace SMSolver {
     template<typename DT>
             basic_unit<DT> operator/ (const basic_unit<DT>& x, const DT& y){ //{
                 basic_unit<DT> n(y);
-                return operator/=(n, x);
+                basic_unit<DT> p(x);
+                return operator/=(p, n);
             } //}
 
     template<typename DT>
