@@ -8,3 +8,8 @@
 *.pre
 *.toc
 *.dict
+
+a.out
+*.o
+*.core
+vgcore*

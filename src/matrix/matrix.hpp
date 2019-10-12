@@ -134,6 +134,10 @@ namespace SMSolver {
                 void comAdd(size_t, size_t);
                 void swap_col(size_t, size_t);
                 void swap_row(size_t, size_t);
+                void col_times(size_t, const dataType& x);
+                void row_times(size_t, const dataType& x);
+                void col_times_add_to(size_t, const dataType& x, size_t);
+                void row_times_add_to(size_t, const dataType& x, size_t);
                 dataType norm_inf()
                 {
                     dataType ret = xabs(data->at(0));
@@ -170,6 +174,9 @@ namespace SMSolver {
 
                 cvector<dataType> gauss_seidel_solver(const cvector<dataType>&);
                 cvector<DT> LU_Decomposition_solver(const cvector<dataType>& b);
+
+                cvector<DT> Guass_Elimination_solver(const cvector<dataType>&);
+                std::pair<smatrix<dataType>, smatrix<dataType>> Gauss_Elimination();
 
                 void set(dataType (*)(size_t, size_t));
                 void set(dataType (*)(size_t, size_t, const dataType&));
@@ -309,6 +316,75 @@ namespace SMSolver {
             return x;
         } //}
 
+    // preliminary transform //{
+    template<typename DT>
+    void smatrix<DT>::col_times(size_t j, const dataType& x)
+    {
+        for(size_t i = 1; i<=this->col_row; i++)
+            this->get(i, j) *= x;
+        return;
+    }
+    template<typename DT>
+    void smatrix<DT>::row_times(size_t i, const dataType& x)
+    {
+        for(size_t j = 1; j<=this->col_row; j++)
+            this->get(i, j) *= x;
+        return;
+    }
+    template<typename DT>
+    void smatrix<DT>::col_times_add_to(size_t j1, const dataType& x, size_t j2){
+        for(size_t i = 1; i<=this->col_row; i++)
+            this->get(i, j2) += this->get(i, j1) * x;
+        return;
+    }
+    template<typename DT>
+    void smatrix<DT>::row_times_add_to(size_t i1, const dataType& x, size_t i2)
+    {
+        for(size_t j = 1; j<=this->col_row; j++)
+            this->get(i2, j) += this->get(i1, j) * x;
+        return;
+    }
+    //}
+
+    // Gauss elimination method
+    template<typename DT> //{
+    cvector<DT> smatrix<DT>::Guass_Elimination_solver(const cvector<dataType>& b)
+    {
+        std::pair<smatrix<dataType>, smatrix<dataType>> gauss_elimi = this->Gauss_Elimination();
+        cvector<dataType> new_b = gauss_elimi.second * b;
+        smatrix<dataType>& g__  = gauss_elimi.first;
+        cvector<DT> result      = g__.solver_upper_triangle_linear_equation(new_b);
+        return result;
+    }
+    template<typename DT>
+    std::pair<smatrix<DT>, smatrix<DT>> smatrix<DT>::Gauss_Elimination()
+    {
+        smatrix<dataType> transf(this->col_row);
+        smatrix<dataType> current_copy(*this);
+        transf.set([](size_t i, size_t j) -> dataType {if(i == j) return 1; else return 0;});
+        for(size_t i = 1; i<=this->col_row; i++){
+            size_t ix = i;
+            for(; ix<=this->col_row; ix++){
+                if(current_copy.get(ix, ix) != 0){
+                    if(ix != i){
+                        current_copy.swap_row(ix, i);
+                        transf.swap_row(ix, i);
+                    }
+                    break;
+                }
+            }
+            if(ix == this->col_row && current_copy.get(ix, ix) == 0){
+                throw *new SMSolverException("Not invertible matrix");
+            }
+            for(size_t i2 = i+1; i2<=this->col_row; i2++){
+                dataType factor2 = -current_copy.get(i2, i) / current_copy.get(i, i);
+                current_copy.row_times_add_to(i, factor2, i2);
+                transf.row_times_add_to(i, factor2, i2);
+            }
+        }
+        return std::pair<smatrix<dataType>, smatrix<dataType>>(std::move(current_copy), std::move(transf));
+    } //}
+
     // give up ... gauss-seidel-method
     template<typename DT>
         cvector<DT> smatrix<DT>::gauss_seidel_solver(const cvector<dataType>& b) //{
@@ -337,14 +413,14 @@ namespace SMSolver {
             smatrix<dataType> D_m1(*this);
             smatrix<dataType> B(*this);
             D_m1.set([](size_t i, size_t j, const dataType& x){
-                    if(i != j) return 0.0;
-                    if(x == 0) throw "unexcepted zero in diagonal of square matrix.";
-                    return (1.0 / x);
-                    });
+            if(i != j) return 0.0;
+            if(x == 0) throw "unexcepted zero in diagonal of square matrix.";
+            return (1.0 / x);
+            });
             B.set([](size_t i, size_t j, const dataType& x){
-                    if(i == j) return 0.0;
-                    return x;
-                    });
+            if(i == j) return 0.0;
+            return x;
+            });
             cvector<dataType> q = D_m1 * b;
             smatrix<dataType> V = D_m1 * B;
             */
@@ -372,7 +448,7 @@ namespace SMSolver {
             return x;
         } //}
 
-    template<typename DT>
+template<typename DT>
         void smatrix<DT>::set(dataType (*cal_func)(size_t, size_t)) //{
         {
             for(size_t i = 1; i<=this->col_row;i++){
@@ -492,6 +568,11 @@ namespace SMSolver {
                 MATRIX_OUT_OF_RANGE;
             if(i == j)
                 throw "required unequal comAdd operand.";
+            if(i < j)
+                this->get(i, i) += this->get(j, j);
+            else 
+                this->get(i, i) -= this->get(j, j);
+
             for(size_t m = 1;m<=this->col_row;m++){
                 this->get(m, i) += this->get(m, j);
                 this->get(i, m) += this->get(j, m);

@@ -45,6 +45,7 @@ void TESTB()
     auto n2 = x.new_node(0.0 * BUnit.m, 2.0 * BUnit.m);
     auto n3 = x.new_node(2.0 * BUnit.m, 2.0 * BUnit.m);
     auto n4 = x.new_node(2.0 * BUnit.m, 0.0 * BUnit.m);
+
     basic_unit<double> EB(1);
     basic_unit<double> IB(1);
     basic_unit<double> AB(1);
@@ -74,15 +75,14 @@ void TESTB()
 
     auto m1 = x.getMetricRigidMetric();
     auto v1 = x.getMetricP();
-    auto m1_lu = m1.get_LU_test();
+    auto m1_lu = m1.Gauss_Elimination();
 
-    auto delta = m1.LU_Decomposition_solver(v1);
+    auto delta = m1.Guass_Elimination_solver(v1);
 
     std::cout << m1.toString() << std::endl;
     std::cout << v1.toString() << std::endl;
     std::cout << m1_lu.first.toString() << std::endl; 
     std::cout << m1_lu.second.toString() << std::endl; 
-    std::cout << (m1_lu.first * m1_lu.second- m1).toString() << std::endl; 
     std::cout << "displacement: " << delta.toString() << std::endl;
     return;
 }

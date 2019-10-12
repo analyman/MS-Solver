@@ -6,7 +6,7 @@
 #include<cstdlib>
 
 #define MAX_TEST_NUM 55
-#define TEST_SIZE 3
+#define TEST_SIZE 55
 
 using namespace SMSolver;
 
@@ -49,8 +49,13 @@ class B
 
 void TESTA()
 {
-    A y, z;
-    A k(y + z);
+    smatrix<double> S(5);
+    S.set([](size_t i, size_t j){
+            return i + j * 1.0;
+            });
+    std::cout << S.toString() << std::endl;
+    S.comAdd(1, 3);
+    std::cout << S.toString();
     return;
 }
 
@@ -116,7 +121,8 @@ void solverTest()
     cvector<double> b(TEST_SIZE);
     b.set([](size_t i){return 1.0 * i;});
 
-    auto x = A.LU_Decomposition_solver(b);
+//    auto x = A.LU_Decomposition_solver(b);
+    auto x = A.Guass_Elimination_solver(b);
     auto t = A * x - b;
     std::cout << A.toString() << std::endl;
     std::cout << x.toString() << std::endl;
@@ -151,7 +157,7 @@ void XsolverTest()
 
     auto n = A * B;
 
-    auto x = A.LU_Decomposition_solver(b);
+    auto x = A.Guass_Elimination_solver(b);
     auto t = A * x - b;
 
     std::cout << A.toString() << std::endl;
@@ -162,11 +168,11 @@ void XsolverTest()
 
 int main()
 {
-    XsolverTest();
-//    solverTest();
+    //    XsolverTest();
+    //    solverTest();
     //    matrixTest();
     //    Xtest();
-    //    TESTA();
+    TESTA();
     //    TESTB();
     return 0;
 }

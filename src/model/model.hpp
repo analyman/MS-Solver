@@ -5,6 +5,8 @@
 #include<stack>
 #include<algorithm>
 
+#include<cstdlib>
+
 #include<cmath>
 
 #include "./unit.hpp"
@@ -468,6 +470,7 @@ class SMSolverManager { //{
             for(auto x = map_list.begin(); x!=map_list.end(); x++, z++){
                 std::cout << z << ": " << *x << std::endl;
             }
+            std::cout << M.toString() << std::endl;
 #endif
             if(M.get_size() != map_list.size())
                 throw *new SMSolverException("__traversing_reduce unmatch size");
@@ -494,7 +497,7 @@ class SMSolverManager { //{
             uint32_t n = V.get_size();
             for(auto x = map_list.rbegin(); x!=map_list.rend(); x++, n--){
                 if(n != *x && *x != 0){
-                    V[*x] += V[n - 1];
+                    V[*x] += V[n];
                 }
             }
             n = V.get_size();
@@ -549,119 +552,119 @@ cvector<DT> getMetricP() //{
     return ret;
 } //}
 
-        smatrix<DT> getMetricRigidMetric() // don't consider Force //{
-        {
-            std::vector<Node<DT>*> fixed_beam;
-            smatrix<DT> interResult = __getMetricRigidMetric();
-            map_list.resize(interResult.get_size());
-            for(size_t i = 0; i<map_list.size(); i++) // initial states
-                map_list[i] = i + 1;
-            for(auto n = nodes.begin(); n!=nodes.end(); n++){
-                Node<DT>* n_ptr = *n;
+smatrix<DT> getMetricRigidMetric() // don't consider Force //{
+{
+    std::vector<Node<DT>*> fixed_beam;
+    smatrix<DT> interResult = __getMetricRigidMetric();
+    map_list.resize(interResult.get_size());
+    for(size_t i = 0; i<map_list.size(); i++) // initial states
+        map_list[i] = i + 1;
+    for(auto n = nodes.begin(); n!=nodes.end(); n++){
+        Node<DT>* n_ptr = *n;
 #if defined(MODEL_DEBUG)
-                std::cout << "node " << n_ptr->m_id << " connected degree is: " << n_ptr->m_connected_beams.size() << std::endl;
+        std::cout << "node " << n_ptr->m_id << " connected degree is: " << n_ptr->m_connected_beams.size() << std::endl;
 #endif
-                if(n_ptr->m_connected_beams.size() <= 0)
-                    throw *new SMSolverException("Found unconnected node.");
+        if(n_ptr->m_connected_beams.size() <= 0)
+            throw *new SMSolverException("Found unconnected node.");
 
-                std::vector<std::pair<uint32_t, Connector>> _x = __handleNodePtr(n_ptr);
-                if(n_ptr->m_connected_beams.size() == 1){
-                    if(n_ptr->_support != BasicSupport::NoneSupport){
-                        map_list[_x[0].first - 1] = 0;
-                        map_list[_x[0].first    ] = 0;
-                        if(_x[0].second == Connector::FixedConnect && n_ptr->_support == BasicSupport::FixedSupport)
-                            map_list[_x[0].first + 1] = 0;
-                    }
-                }
+        std::vector<std::pair<uint32_t, Connector>> _x = __handleNodePtr(n_ptr);
+        if(n_ptr->m_connected_beams.size() == 1){
+            if(n_ptr->_support != BasicSupport::NoneSupport){
+                map_list[_x[0].first - 1] = 0;
+                map_list[_x[0].first    ] = 0;
+                if(_x[0].second == Connector::FixedConnect && n_ptr->_support == BasicSupport::FixedSupport)
+                    map_list[_x[0].first + 1] = 0;
+            }
+        }
 
-                // handle elastic condition ...
-                if(n_ptr->m_connected_beams.size() == 2) // maybe elastic condition
-                {
-                    std::vector<std::tuple<uint32_t, Connector, basic_unit<DT>>> _x = __handleNodePtr2(n_ptr);
-                    uint32_t __a, __b;
-                    Connector __ca, __cb;
-                    basic_unit<DT> __ua, __ub;
-                    std::tie(__a, __ca, __ua) = _x[0];
-                    std::tie(__b, __cb, __ub) = _x[1];
-                    map_list[__b - 1] = __a;
-                    map_list[__b    ] = __a + 1;
-                    if(__ca == Connector::FixedConnect && __cb == Connector::FixedConnect){
-                        map_list[__b + 1] = __a + 2;
-                    }
-                    if(
-                            (__ca == Connector::FixedConnect && 
-                             __cb == Connector::ElasticHingeConnect) ||
-                            (__cb == Connector::FixedConnect &&
-                             __ca == Connector::ElasticHingeConnect)){
-                        DT K = 0;
-                        if(__ca == Connector::ElasticHingeConnect){
-                            UNIT_IS_K(__ua);
-                            K = __ua.ratio * __ua.value;
-                        } else {
-                            UNIT_IS_K(__ub);
-                            K = __ub.ratio * __ub.value;
-                        }
-                        if(n_ptr->_support != BasicSupport::FixedSupport){
-                            interResult.get(__a + 2, __a + 2) -= K;
-                            interResult.get(__b + 2, __b + 2) -= K;
-                            interResult.get(__a + 2, __b + 2) += K;
-                            interResult.get(__a + 2, __b + 2) += K;
-                        } else {
-                            if(__ca == Connector::ElasticHingeConnect){
-                                interResult.get(__a + 2, __a + 2) -= K;
-                                map_list[__b + 1] = 0;
-                            } else {
-                                interResult.get(__b + 2, __b + 2) -= K;
-                                map_list[__a + 1] = 0;
-                            }
-                        }
-                    }
-                    if(n_ptr->_support != BasicSupport::NoneSupport){
-                        map_list[__a - 1] = 0;
-                        map_list[__a    ] = 0;
-                    }
-                    if(n_ptr->_support == BasicSupport::FixedSupport){
-                        if(__ca == Connector::FixedConnect)
-                            map_list[__a + 1] = 0;
-                        if(__cb == Connector::FixedConnect)
-                            map_list[__b + 1] = 0;
-                    }
-                    continue;
+        // handle elastic condition ...
+        if(n_ptr->m_connected_beams.size() == 2) // maybe elastic condition
+        {
+            std::vector<std::tuple<uint32_t, Connector, basic_unit<DT>>> _x = __handleNodePtr2(n_ptr);
+            uint32_t __a, __b;
+            Connector __ca, __cb;
+            basic_unit<DT> __ua, __ub;
+            std::tie(__a, __ca, __ua) = _x[0];
+            std::tie(__b, __cb, __ub) = _x[1];
+            map_list[__b - 1] = __a;
+            map_list[__b    ] = __a + 1;
+            if(__ca == Connector::FixedConnect && __cb == Connector::FixedConnect){
+                map_list[__b + 1] = __a + 2;
+            }
+            if(
+                    (__ca == Connector::FixedConnect && 
+                     __cb == Connector::ElasticHingeConnect) ||
+                    (__cb == Connector::FixedConnect &&
+                     __ca == Connector::ElasticHingeConnect)){
+                DT K = 0;
+                if(__ca == Connector::ElasticHingeConnect){
+                    UNIT_IS_K(__ua);
+                    K = __ua.ratio * __ua.value;
+                } else {
+                    UNIT_IS_K(__ub);
+                    K = __ub.ratio * __ub.value;
                 }
-                uint32_t base_index = _x[0].first;
-                bool hasFix = false;
-                for(auto m = _x.begin(); m!=_x.end(); m++){
-                    uint32_t index;
-                    Connector connect;
-                    std::tie(index, connect) = *m;
-                    if(connect == Connector::FixedConnect){
-                        base_index = index;
-                        hasFix = true;
-                        break;
+                if(n_ptr->_support != BasicSupport::FixedSupport){
+                    interResult.get(__a + 2, __a + 2) -= K;
+                    interResult.get(__b + 2, __b + 2) -= K;
+                    interResult.get(__a + 2, __b + 2) += K;
+                    interResult.get(__a + 2, __b + 2) += K;
+                } else {
+                    if(__ca == Connector::ElasticHingeConnect){
+                        interResult.get(__a + 2, __a + 2) -= K;
+                        map_list[__b + 1] = 0;
+                    } else {
+                        interResult.get(__b + 2, __b + 2) -= K;
+                        map_list[__a + 1] = 0;
                     }
-                }
-                if(n_ptr->_support != BasicSupport::NoneSupport){
-                    map_list[base_index - 1] = 0;
-                    map_list[base_index    ] = 0;
-                    if(n_ptr->_support == BasicSupport::FixedSupport && hasFix)
-                        map_list[base_index + 1] = 0;
-                }
-                for(auto m = _x.begin(); m!=_x.end(); m++){
-                    uint32_t index;
-                    Connector connect;
-                    std::tie(index, connect) = *m;
-                    if(index == base_index)
-                        continue;
-                    map_list[index - 1] = base_index;
-                    map_list[index]     = base_index + 1;
-                    if(connect == Connector::FixedConnect)
-                        map_list[index+1] = base_index + 2;
                 }
             }
-            // traversing the nodes, store reduction information into map_list: vector<>
-            __traversing_reduce(interResult);
-            return interResult;
-        } //}
+            if(n_ptr->_support != BasicSupport::NoneSupport){
+                map_list[__a - 1] = 0;
+                map_list[__a    ] = 0;
+            }
+            if(n_ptr->_support == BasicSupport::FixedSupport){
+                if(__ca == Connector::FixedConnect)
+                    map_list[__a + 1] = 0;
+                if(__cb == Connector::FixedConnect)
+                    map_list[__b + 1] = 0;
+            }
+            continue;
+        }
+        uint32_t base_index = _x[0].first;
+        bool hasFix = false;
+        for(auto m = _x.begin(); m!=_x.end(); m++){
+            uint32_t index;
+            Connector connect;
+            std::tie(index, connect) = *m;
+            if(connect == Connector::FixedConnect){
+                base_index = index;
+                hasFix = true;
+                break;
+            }
+        }
+        if(n_ptr->_support != BasicSupport::NoneSupport){
+            map_list[base_index - 1] = 0;
+            map_list[base_index    ] = 0;
+            if(n_ptr->_support == BasicSupport::FixedSupport && hasFix)
+                map_list[base_index + 1] = 0;
+        }
+        for(auto m = _x.begin(); m!=_x.end(); m++){
+            uint32_t index;
+            Connector connect;
+            std::tie(index, connect) = *m;
+            if(index == base_index)
+                continue;
+            map_list[index - 1] = base_index;
+            map_list[index]     = base_index + 1;
+            if(connect == Connector::FixedConnect)
+                map_list[index+1] = base_index + 2;
+        }
+    }
+    // traversing the nodes, store reduction information into map_list: vector<>
+    __traversing_reduce(interResult);
+    return interResult;
+} //}
 }; //} class tempalte SMSolverManager<T>
 
 template class SMSolverManager<double>;
