@@ -343,9 +343,11 @@ smatrix<basic_unit<DT>> Beam<DT>::getLocalRigidMatrix() //{
             if(i<=3)
             return _this->get(i, j);
             if(j<=3)
-            return _this->get(i - 3, j + 3);
+            return _this->get(j,     i);
             return _this->get(i - 3, j - 3);
             });
+    enheng.get(6, 5) = -enheng.get(6, 5); // load equilibrium equation
+    enheng.get(5, 6) = -enheng.get(5, 6);
     return enheng;
 } //}
 template<typename DT>
@@ -479,6 +481,10 @@ class SMSolverManager { //{
                 if(n != *x && *x != 0){
                     M.comAdd(*x, n);
                 }
+#if defined(MODEL_DEBUG)
+                std::cout << "n = " << n << ", *x = " << *x <<std::endl;
+                std::cout << M.toString() << std::endl;
+#endif
             }
             n = M.get_size();
             std::vector<uint32_t> delete_s;
@@ -515,7 +521,7 @@ cvector<DT> __getMetricP() //{
 {
     cvector<DT> ret(this->m_beamIdCount * 6);
     for(size_t i = 1; i<=this->m_beamIdCount; i++){
-        cvector<DT> __t = this->getBeam(i)->getLocalPVectorMetric();
+        cvector<DT> __t = this->getBeam(i)->getGlobalPVectorMetric();
 #if defined(MODEL_DEBUG)
         std::cout << "STAGED result, P of BeamID: " << this->getBeam(i)->m_id << std::endl;
         std::cout << __t.toString() << std::endl;
