@@ -69,13 +69,15 @@ enum func_enum  //{
 class Token //{
 {
     public:
-        typedef unsigned int IdType;
+        typedef unsigned int      IdType;
         typedef unsigned short LevelType;
+        typedef size_t           PosType;
     private:
         IdType        m_id;
         token_enum    m_token_type;
         operator_type m_op_type;
         LevelType     m_level;
+        PosType       m_pos;
     public:
         Token() = default;
         Token(const IdType& id, const token_enum& type, const operator_type& op_type = operator_type::OP_NONE): 
@@ -87,6 +89,7 @@ class Token //{
         inline token_enum    GetType()   const {return this->m_token_type;}
         inline operator_type GetOpType() const {return this->m_op_type;}
         inline LevelType&    GetLevel()        {return this->m_level;}
+        inline PosType&      GetPos()          {return this->m_pos;}
 }; //}
 
 std::ostream& operator<<(std::ostream& o_s, const Token& t) //{
@@ -176,7 +179,7 @@ class Tokenizer  //{
                 Tokenizer<ValType>* m_tokenizer;
                 Token               m_current_token;
             public:
-                TokenIterator(): m_tokenizer(nullptr){};
+                TokenIterator(): m_tokenizer(nullptr), m_current_token(){};
                 TokenIterator(Tokenizer<ValType>* t): m_tokenizer(t){
                     if(nullptr != this->m_tokenizer && m_tokenizer->next(this->m_current_token))
                         return;
@@ -227,9 +230,11 @@ class Tokenizer  //{
             return *this;
         }
 
-        ~Tokenizer() = default; // TODO: delete context ?
+        ~Tokenizer() = default;
 
-        bool next(Token& _out); // TODO
+        bool next(Token& _out);
+
+        inline const std::string& GetParseStr(){return this->m_parse_str;}
 
         TokenIterator begin(){return TokenIterator(this);};
         TokenIterator end(){return TokenIterator();};
@@ -243,34 +248,42 @@ inline bool Tokenizer<T>::next(Token& _out) //{
             switch (m_parse_str[m_pointer]) {
                 case '(':
                     _out = MathExpr::Token(++m_allocated_id, MathExpr::token_enum::LP);
+                    _out.GetPos() = m_pointer;
                     ++m_pointer;
                     return true;
                 case ')':
                     _out = MathExpr::Token(++m_allocated_id, MathExpr::token_enum::RP);
+                    _out.GetPos() = m_pointer;
                     ++m_pointer;
                     return true;
                 case '^':
                     _out = MathExpr::Token(++m_allocated_id, MathExpr::token_enum::OperatorA, operator_type::OP_pow);
+                    _out.GetPos() = m_pointer;
                     ++m_pointer;
                     return true;
                 case '*':
                     _out = MathExpr::Token(++m_allocated_id, MathExpr::token_enum::OperatorB, operator_type::OP_time);
+                    _out.GetPos() = m_pointer;
                     ++m_pointer;
                     return true;
                 case '/':
                     _out = MathExpr::Token(++m_allocated_id, MathExpr::token_enum::OperatorB, operator_type::OP_div);
+                    _out.GetPos() = m_pointer;
                     ++m_pointer;
                     return true;
                 case '+':
                     _out = MathExpr::Token(++m_allocated_id, MathExpr::token_enum::OperatorC, operator_type::OP_plus);
+                    _out.GetPos() = m_pointer;
                     ++m_pointer;
                     return true;
                 case '-':
                     _out = MathExpr::Token(++m_allocated_id, MathExpr::token_enum::OperatorC, operator_type::OP_minus);
+                    _out.GetPos() = m_pointer;
                     ++m_pointer;
                     return true;
                 case '=':
                     _out = MathExpr::Token(++m_allocated_id, MathExpr::token_enum::OperatorD, operator_type::OP_assign);
+                    _out.GetPos() = m_pointer;
                     ++m_pointer;
                     return true;
                 case ' ':
@@ -292,11 +305,13 @@ inline bool Tokenizer<T>::next(Token& _out) //{
             SizeType p = m_parse_str.find_first_not_of(alpha_num, m_pointer);
             if(m_parse_str[p] == '('){
                 _out = MathExpr::Token(++m_allocated_id, MathExpr::token_enum::Function);
+                _out.GetPos() = m_pointer;
                 m_func_map.get(m_allocated_id) = m_parse_str.substr(m_pointer, p - m_pointer);
                 m_pointer = p;
                 return true;
             } else {
                 _out = MathExpr::Token(++m_allocated_id, MathExpr::token_enum::Id);
+                _out.GetPos() = m_pointer;
                 m_id_map.get(m_allocated_id) = m_parse_str.substr(m_pointer, p - m_pointer);
                 m_pointer = p;
                 return true;
@@ -307,6 +322,7 @@ inline bool Tokenizer<T>::next(Token& _out) //{
             SizeType e = m_parse_str.find_first_of(".", s);
             if(e <= p) throw *new TokenizeException("uncorrect number: " + m_parse_str.substr(m_pointer, p - m_pointer));
             _out = MathExpr::Token(++m_allocated_id, MathExpr::token_enum::ImmediateValue);
+            _out.GetPos() = m_pointer;
             double IM = std::stod(m_parse_str.substr(m_pointer, p - m_pointer));
             m_immediate_map.get(m_allocated_id) = IM;
             m_pointer = p;
