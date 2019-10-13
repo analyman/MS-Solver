@@ -12,7 +12,7 @@ void testA()
 
 void testB()
 {
-    MathExpr::MathExprEval<double> EA = MathExpr::MathExprEval<double>("5 * 100 / 20 - xyzk * pow(33)");
+    MathExpr::MathExprEval<double> EA = MathExpr::MathExprEval<double>("((5 * 100)) / ((20 - xyzk * pow(33 * sqrt(x) * 300)))");
     MathExpr::APT<MathExpr::Token>* T = EA.GetParseTree();
     std::cout << std::hex << "0x" << (void*)T << std::endl;
 }

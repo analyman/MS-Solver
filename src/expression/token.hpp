@@ -195,9 +195,9 @@ class Tokenizer  //{
                     this->m_tokenizer = nullptr;
                     return *this;
                 }
-                TokenIterator  operator ++(int)                    { TokenIterator ret(*this); ++(*this); return ret;}
-                bool           operator ==(const TokenIterator&)   { return this->m_tokenizer == nullptr;}
-                bool           operator !=(const TokenIterator& x) { return !this->operator==(x);}
+                TokenIterator  operator ++(int){ TokenIterator ret(*this); ++(*this); return ret;}
+                bool operator ==(const TokenIterator& x)   {return this->m_tokenizer == x.m_tokenizer;}
+                bool operator !=(const TokenIterator& x) { return !this->operator==(x);}
                 // copy assignment
                 TokenIterator& operator=(const TokenIterator& x) = default;
                 ~TokenIterator() = default;
