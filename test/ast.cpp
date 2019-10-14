@@ -1,6 +1,8 @@
-#include "../src/expression/token.hpp"
-#include "../src/expression/expression_eval.hpp"
-#include "../src/expression/expr_parse_tree.hpp"
+#include "../include/mssm/expression/token.hpp"
+#include "../include/mssm/expression/expression_eval.hpp"
+#include "../include/mssm/expression/expr_parse_tree.hpp"
+
+using namespace MathExpr;
 
 void testA()
 {
@@ -12,12 +14,17 @@ void testA()
 
 void testB()
 {
-    MathExpr::MathExprEval<double> EA = MathExpr::MathExprEval<double>("((5 * 100)) / ((20 - xyzk * pow(33 * sqrt(x) * 300)))");
+    MathExpr::MathExprEval<double> EA = MathExpr::MathExprEval<double>("");
     MathExpr::APT<MathExpr::Token>* T = EA.GetParseTree();
     std::cout << std::hex << "0x" << (void*)T << std::endl;
+    std::cout << *T << std::endl;
+    delete T;
 }
 
 int main()
 {
-    testB();
+//    testB();
+    typename FunctionMap<double>::unary_func _sin = FunctionMap<double>::FMap.get_unary("sin");
+    double x = sin(1);
+    std::cout << std::hex << "0x" << (long)_sin << "  sin(1) = " << x << std::endl;
 }

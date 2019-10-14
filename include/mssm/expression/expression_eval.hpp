@@ -81,10 +81,10 @@ class CircularList //{
 
 enum accept_token_type //{
 {
-    id_func_lp_im, // BEGIN, AFTER_LP, AFTER_OP-ABCD
-    op_abc_rp,     // AFTER_RP, AFTER_IM
-    op_abcd_rp,    // AFTER_ID
-    lp             // AFTER_FUNC
+    id_func_lp_im,  // BEGIN, AFTER_LP, AFTER_OP-ABCD, AFTER_DELIMITER
+    op_abc_rp_del,  // AFTER_RP, AFTER_IM
+    op_abcd_rp_del, // AFTER_ID
+    lp              // AFTER_FUNC
 }; //}
 
 bool accept_match(accept_token_type at, token_enum t) //{
@@ -96,16 +96,17 @@ bool accept_match(accept_token_type at, token_enum t) //{
                     t == token_enum::LP ||
                     t == token_enum::ImmediateValue)
                 return true; else return false;
-        case op_abc_rp:
+        case op_abc_rp_del:
             if(t == token_enum::OperatorA ||
                     t == token_enum::OperatorB ||
                     t == token_enum::RP ||
                     t == token_enum::OperatorC )
                 return true; else return false;
-        case op_abcd_rp:
+        case op_abcd_rp_del:
             if(t == token_enum::OperatorA ||
                     t == token_enum::OperatorB ||
                     t == token_enum::RP ||
+                    t == token_enum::Delimiter ||
                     t == token_enum::OperatorC ||
                     t == token_enum::OperatorD )
                 return true; else return false;
@@ -122,12 +123,13 @@ accept_token_type nextAcceptance(token_enum t) //{
         case token_enum::OperatorB:
         case token_enum::OperatorC:
         case token_enum::OperatorD:
+        case token_enum::Delimiter:
             return accept_token_type::id_func_lp_im;
         case token_enum::RP:
         case token_enum::ImmediateValue:
-            return accept_token_type::op_abc_rp;
+            return accept_token_type::op_abc_rp_del;
         case token_enum::Id:
-            return accept_token_type::op_abcd_rp;
+            return accept_token_type::op_abcd_rp_del;
         case token_enum::Function:
             return accept_token_type::lp;
     }
@@ -145,6 +147,7 @@ class ParseXException //{
         virtual const char * what() const noexcept {return msg.c_str();}
 }; //}
 
+template<typename T> class MathExprEvalS;
 #define TOKEN_BUF_SIZE 10
 template<typename T>
 class MathExprEval //{
@@ -154,6 +157,7 @@ class MathExprEval //{
     typedef typename Tokenizer<double>::SizeType SizeType;
 
     private:
+        friend class MathExprEvalS<T>;
         Tokenizer<double>       m_tokenizer; // FIXME:
         std::stack<Token>       m_operator_stack;
         std::stack<APT<Token>*> m_val_stack;
@@ -294,7 +298,7 @@ void func_eval_stack() //{
 
     if(m_val_stack.empty()) goto handle_func;
     third = m_val_stack.top();
-    if(second->GetToken().GetLevel() == op.GetLevel() + 1)
+    if(third->GetToken().GetLevel() == op.GetLevel() + 1)
         func_arity = Operand_type::Ternary;
     else goto handle_func;
     m_val_stack.pop();
@@ -340,11 +344,12 @@ handle_func:
             m_token_buf(TOKEN_BUF_SIZE) {
                 this->m_iter     = m_tokenizer.begin();
                 this->m_iter_end = m_tokenizer.end();
-                if(m_iter != m_iter_end)
+                if(m_iter != m_iter_end){
                     m_token_buf.push_front(*m_iter);
+                    ++m_iter;
+                }
                 else
                     m_prev_counter = 0;
-                ++m_iter;
             } //}
         APT<Token>* GetParseTree() //{
         {
@@ -372,6 +377,8 @@ handle_func:
                         --m_current_level;
                         this->func_eval_stack();
                         continue;
+                    case token_enum::Delimiter:
+                        continue;
                     case token_enum::Id:
                     case token_enum::ImmediateValue:
                         push_apt = new MathExpr::APT<Token>(t_t, Operand_type::Leaf);
@@ -380,18 +387,33 @@ handle_func:
                         continue;
                 }
             }
-            if(m_operator_stack.empty() && 
-               m_val_stack.size() == 1  && 
-               this->m_current_level == 0)
-                return m_val_stack.top();
-            else 
+            if(m_operator_stack.empty() && this->m_current_level == 0 && m_val_stack.size() <= 1){
+                if(m_val_stack.size() == 1)
+                    return m_val_stack.top();
+                else return nullptr; // empty syntax tree
+            }
+            else
                 throw *new ParseXException("Parse Error.");
         } //}
 }; //}
 
-template class MathExprEval<double>;
+template<typename T>
+class MathExprEvalS: public MathExprEval<T> //{
+{
+    public:
+    typedef typename MathExprEval<T>::SizeType  SizeType;
+    typedef typename MathExprEval<T>::LevelType LevelType;
+    typedef typename MathExprEval<T>::ValType   ValType;
+
+    private:
+    APT<Token>* m_current_ast;
+
+    public:
+    MathExprEvalS(const std::string& str): MathExprEval<ValType>(str){}
+}; //}
+
+extern template class MathExprEval<double>;
 
 }
-
 
 #endif // _EXPRESSION_EVAL_HPP

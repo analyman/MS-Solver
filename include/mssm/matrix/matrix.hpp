@@ -856,7 +856,7 @@ template<typename DT>
     //} class cvector
 }
 
-template class SMSolver::smatrix<double>;
-template class SMSolver::cvector<double>;
+extern template class SMSolver::smatrix<double>;
+extern template class SMSolver::cvector<double>;
 
 #endif // MATRIX_HPP

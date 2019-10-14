@@ -1,4 +1,4 @@
-#include "../src/expression/token.hpp"
+#include "../include/mssm/expression/token.hpp"
 
 void testA()
 {

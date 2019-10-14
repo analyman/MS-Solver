@@ -673,9 +673,9 @@ smatrix<DT> getMetricRigidMetric() // don't consider Force //{
 } //}
 }; //} class tempalte SMSolverManager<T>
 
-template class SMSolverManager<double>;
-template class Beam<double>;
-template class Node<double>;
+extern template class SMSolverManager<double>;
+extern template class Beam<double>;
+extern template class Node<double>;
 } // namespace SMSolver
 
 #endif

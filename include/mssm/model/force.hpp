@@ -25,7 +25,8 @@ struct PointLoad {
 };
 
 template<typename DT>
-class BasicLoad {
+class BasicLoad  //{
+{
     public:
     bool is_point_load;
     union _load {
@@ -94,12 +95,12 @@ class BasicLoad {
         else 
             return this->load.m_distributed_load.value == 0.0;
     }
-};
+}; //}
 
 template<typename DT>
 BasicLoad<DT> BasicLoad<DT>::ZERO_LOAD(true, 0);
 
-template class BasicLoad<double>;
+extern template class BasicLoad<double>;
 
 }
 #endif

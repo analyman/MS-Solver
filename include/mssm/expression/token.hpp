@@ -13,6 +13,7 @@
 #include<iomanip>
 
 #include<exception>
+#include<cmath>
 
 class TokenizeException //{
 {
@@ -28,17 +29,18 @@ class TokenizeException //{
 
 namespace MathExpr {
 
-const char* alpha_num = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-const char* __num_dot = "0123456789ABCDEFabcdef.";
+extern const char* alpha_num;
+extern const char* __num_dot;
 
 enum token_enum //{
 {
-    LP,            // left parentheses
-    RP,            // right parentheses
     OperatorA,     // ^
     OperatorB,     // *, /
     OperatorC,     // +, -
     OperatorD,     // =
+    LP,            // left parentheses
+    RP,            // right parentheses
+    Delimiter,     // Delimiter ,
     Id,            // identify
     Function,      // function name, function name must follow a left parentheses
     ImmediateValue // Immediate Value
@@ -66,6 +68,7 @@ enum func_enum  //{
     f_min
 }; //}
 
+template<typename T> class APT;
 class Token //{
 {
     public:
@@ -73,6 +76,8 @@ class Token //{
         typedef unsigned short LevelType;
         typedef size_t           PosType;
     private:
+        template<typename T>
+        friend std::ostream& operator_out_aux(std::ostream&, const APT<T>&);
         IdType        m_id;
         token_enum    m_token_type;
         operator_type m_op_type;
@@ -103,13 +108,17 @@ std::ostream& operator<<(std::ostream& o_s, const Token& t) //{
         case token_enum::RP:
             o_s << "Right parenthese }";
             break;
+
+        case token_enum::Delimiter:
+            o_s << "Delimiter - ','}";
+            break;
+
         case token_enum::Function:
             o_s << "Function }";
             break;
         case token_enum::OperatorA:
             o_s << "^(pow) }";
             break;
-
         case token_enum::OperatorB:
             if(t.GetOpType() == OP_time)
                 o_s << "* }";
@@ -125,10 +134,10 @@ std::ostream& operator<<(std::ostream& o_s, const Token& t) //{
         case token_enum::OperatorD:
             o_s << "=(assignment) }";
             break;
+
         case token_enum::ImmediateValue:
             o_s << "Immediate Value }";
             break;
-
         case token_enum::Id:
             o_s << "Identify }";
             break;
@@ -152,6 +161,51 @@ class ValContext //{
         ValType& operator[](const KeyType& str){return m_context_map[str];}
         ValType& get       (const KeyType& str){return m_context_map[str];}
 }; //}
+
+template<typename T>
+class FunctionMap //{
+{
+    public:
+    typedef T value_type;
+    typedef value_type (*nonary_func )();
+    typedef value_type (*unary_func  )(value_type);
+    typedef value_type (*binary_func )(value_type, value_type);
+    typedef value_type (*ternary_func)(value_type, value_type, value_type);
+
+    private:
+    std::map<std::string, nonary_func>  m_nonary_func;
+    std::map<std::string, unary_func>   m_unary_func;
+    std::map<std::string, binary_func>  m_binary_func;
+    std::map<std::string, ternary_func> m_ternary_func;
+
+    public:
+    struct static_constructor {
+        static_constructor(){
+            std::cout << "hello" << std::endl;
+            std::cout << "0x" << std::hex << (long)::sin << std::endl;
+
+            new(&FunctionMap<T>::FMap) FunctionMap<T>;
+            FunctionMap<T>::FMap.new_unary("sin", ::sin);
+        }
+    };
+    private:
+    friend struct static_constructor;
+    static static_constructor __static_constructor;
+
+    public:
+    constexpr FunctionMap(): m_nonary_func(), m_unary_func(), m_binary_func(), m_ternary_func(){}
+    constexpr void new_nonary (const std::string& str, const nonary_func&  ff){this->m_nonary_func[str]  = ff;}
+    constexpr void new_unary  (const std::string& str, const unary_func&   ff){this->m_unary_func[str]   = ff;};
+    constexpr void new_binary (const std::string& str, const binary_func&  ff){this->m_binary_func[str]  = ff;};
+    constexpr void new_ternary(const std::string& str, const ternary_func& ff){this->m_ternary_func[str] = ff;};
+#define GETFUNC(name) name##_func get_##name(const std::string& str){return this->m_##name##_func[str];}
+    GETFUNC(nonary) GETFUNC(unary) GETFUNC(binary) GETFUNC(ternary);
+    static FunctionMap FMap;
+}; //}
+template<typename T>
+FunctionMap<T> FunctionMap<T>::FMap;
+template<typename T>
+typename FunctionMap<T>::static_constructor __static_constructor;
 
 template<typename T>
 class Tokenizer  //{
@@ -220,9 +274,11 @@ class Tokenizer  //{
         Tokenizer(const Tokenizer&) = delete;
         Tokenizer(Tokenizer&& _oth) {(*this) = std::move(_oth);};
 
-        IdMapType&        GetIdMap()        { return this->m_id_map;}
-        FuncMapType&      GetFuncMap()      { return this->m_func_map;}
-        ImmediateMapType& GetImmediateMap() { return this->m_immediate_map;}
+        inline IdMapType&        GetIdMap()        { return this->m_id_map;}
+        inline FuncMapType&      GetFuncMap()      { return this->m_func_map;}
+        inline ImmediateMapType& GetImmediateMap() { return this->m_immediate_map;}
+
+        inline IdType GetCurrentId(){return this->m_allocated_id;}
 
         Tokenizer& operator=(const Tokenizer&) = delete;
         Tokenizer& operator=(Tokenizer&& _oth){ // TODO: context pointer
@@ -253,6 +309,11 @@ inline bool Tokenizer<T>::next(Token& _out) //{
                     return true;
                 case ')':
                     _out = MathExpr::Token(++m_allocated_id, MathExpr::token_enum::RP);
+                    _out.GetPos() = m_pointer;
+                    ++m_pointer;
+                    return true;
+                case ',':
+                    _out = MathExpr::Token(++m_allocated_id, MathExpr::token_enum::Delimiter);
                     _out.GetPos() = m_pointer;
                     ++m_pointer;
                     return true;
@@ -320,7 +381,8 @@ inline bool Tokenizer<T>::next(Token& _out) //{
             SizeType p = m_parse_str.find_first_not_of(__num_dot, m_pointer);
             SizeType s = m_parse_str.find_first_of(".", m_pointer);
             SizeType e = m_parse_str.find_first_of(".", s);
-            if(e <= p) throw *new TokenizeException("uncorrect number: " + m_parse_str.substr(m_pointer, p - m_pointer));
+            if(e != std::string::npos && e <= p) 
+                throw *new TokenizeException("uncorrect number: " + m_parse_str.substr(m_pointer, p - m_pointer));
             _out = MathExpr::Token(++m_allocated_id, MathExpr::token_enum::ImmediateValue);
             _out.GetPos() = m_pointer;
             double IM = std::stod(m_parse_str.substr(m_pointer, p - m_pointer));
@@ -332,7 +394,8 @@ inline bool Tokenizer<T>::next(Token& _out) //{
     return true;
 } //}
 
-template class Tokenizer<double>;
+extern template class FunctionMap<double>;
+extern template class Tokenizer<double>;
 }
 
 #endif // _TOKEN_HPP

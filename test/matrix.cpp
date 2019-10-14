@@ -1,7 +1,7 @@
 //#define LU__DEBUG__ 1
 
-#include "../src/matrix/matrix.hpp"
-#include "../src/model//model.hpp"
+#include "../include/mssm/matrix/matrix.hpp"
+#include "../include/mssm/model//model.hpp"
 
 #include<cstdlib>
 

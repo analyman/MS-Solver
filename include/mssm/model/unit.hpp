@@ -314,10 +314,10 @@ const BasicUnit<double> BUnit;
     INIT_UNIT(basic_length, INC_LEN, "m", 1);
     INIT_UNIT(length_mm, INC_LEN, "mm", 0.001);
 
-    template class basic_unit<double>;
-    template class basic_length<double>;
-    template class basic_mass<double>;
-    template class basic_second<double>;
+    extern template class basic_unit<double>;
+    extern template class basic_length<double>;
+    extern template class basic_mass<double>;
+    extern template class basic_second<double>;
 }
 
 #endif // UNIT_HPP

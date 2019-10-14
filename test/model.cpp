@@ -1,8 +1,8 @@
 #define MODEL_DEBUG
 
-#include "../src/matrix/matrix.hpp"
-#include "../src/model/unit.hpp"
-#include "../src/model/model.hpp"
+#include "../include/mssm/matrix/matrix.hpp"
+#include "../include/mssm/model/unit.hpp"
+#include "../include/mssm/model/model.hpp"
 
 #define TEST_SIZE 10
 
