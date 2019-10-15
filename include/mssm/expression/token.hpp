@@ -197,12 +197,21 @@ class FunctionMap //{
 #define GETFUNC(name) name##_func get_##name(std::string& str) {return this->m_##name##_func[str];}
     GETFUNC(nonary) GETFUNC(unary) GETFUNC(binary) GETFUNC(ternary);
 }; //}
-#define UNARY_FUNC(name) FunctionMap<double>::FMap.new_unary(#name, ::name);
+#define UNARY_FUNC(name)  FunctionMap<double>::FMap.new_unary (#name, ::name);
+#define BINARY_FUNC(name) FunctionMap<double>::FMap.new_binary(#name, ::name);
 template<typename T>
 inline FunctionMap<T>::static_constructor::static_constructor(){} // static constructor nothing
 template<>
 inline FunctionMap<double>::static_constructor::static_constructor(){ // static constructor - specification of <double> //{
-    UNARY_FUNC(sin); UNARY_FUNC(cos); UNARY_FUNC(tan); UNARY_FUNC(log);
+    UNARY_FUNC(sin);   UNARY_FUNC(cos);   UNARY_FUNC(tan);   UNARY_FUNC(log);
+    UNARY_FUNC(asin);  UNARY_FUNC(acos);  UNARY_FUNC(atan);  UNARY_FUNC(log2);
+    UNARY_FUNC(sinh);  UNARY_FUNC(cosh);  UNARY_FUNC(tanh);  UNARY_FUNC(log10);
+    UNARY_FUNC(asinh); UNARY_FUNC(acosh); UNARY_FUNC(atanh); UNARY_FUNC(exp);
+    UNARY_FUNC(sqrt);  UNARY_FUNC(ceil);  UNARY_FUNC(floor); UNARY_FUNC(fabs);
+    UNARY_FUNC(cbrt);  UNARY_FUNC(round);
+
+    BINARY_FUNC(fmax);  BINARY_FUNC(fmin); BINARY_FUNC(pow);
+    BINARY_FUNC(atan2); BINARY_FUNC(fmod);
 } //}
 
 template<typename T>

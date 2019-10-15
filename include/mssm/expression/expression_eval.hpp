@@ -108,6 +108,7 @@ bool accept_match(accept_token_type at, token_enum t) //{
             if(t == token_enum::OperatorA ||
                     t == token_enum::OperatorB ||
                     t == token_enum::RP ||
+                    t == token_enum::Delimiter ||
                     t == token_enum::OperatorC )
                 return true; else return false;
         case op_abcd_rp_del:
@@ -449,8 +450,9 @@ class MathExprEvalS: protected MathExprEval<T> //{
         this->m_current_ast = nullptr;
     }
 
-    void continue_with(const std::string& str) //{
+    void continue_with(const std::string& str, bool clean = false) //{
     {
+        if(clean) this->clean_current_ast();
         this->m_current_ast = nullptr;
         this->m_tokenizer.continue_with(str);
         this->m_token_buf.clear_all();

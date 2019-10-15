@@ -2,6 +2,8 @@
 #include "../include/mssm/expression/expression_eval.hpp"
 #include "../include/mssm/expression/expr_parse_tree.hpp"
 
+#include <complex>
+
 using namespace MathExpr;
 
 void testA()
@@ -33,18 +35,36 @@ void testC()
 
 void testD()
 {
-    MathExpr::MathExprEvalS<double> TC = MathExpr::MathExprEvalS<double>("x = 100");
+    MathExpr::MathExprEvalS<double> TC = MathExpr::MathExprEvalS<double>("x = fmax(sqrt(100), log(10000000))");
     double x = TC.Eval();
-    TC.clean_current_ast();
-    TC.continue_with("x * x");
+    TC.continue_with("y = sqrt(200) * 50", true);
     double y = TC.Eval();
+    TC.continue_with("x * y", true);
+    double z = TC.Eval();
     TC.clean_current_ast();
     std::cout << "x = " << x << std::endl;
     std::cout << "y = " << y << std::endl;
+    std::cout << "z = x * y = " << z << std::endl;
+}
+
+void testE()
+{
+    using namespace std;
+    using tttt = complex<int>;
+    MathExpr::MathExprEvalS<tttt> TC = MathExpr::MathExprEvalS<tttt>("x = 100 + 1000");
+    tttt x = TC.Eval();
+    TC.continue_with("y = 2 * 50 * 400", true);
+    tttt y = TC.Eval();
+    TC.continue_with("x * y", true);
+    tttt z = TC.Eval();
+    TC.clean_current_ast();
+    std::cout << "x = " << x << std::endl;
+    std::cout << "y = " << y << std::endl;
+    std::cout << "z = x * y = " << z << std::endl;
 }
 
 int main()
 {
-    testD();
+    testE();
     return 0;
 }
