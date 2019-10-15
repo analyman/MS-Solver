@@ -33,6 +33,14 @@ class CircularList //{
             if(&oth == this) return *this;
         }
 
+        void clear_all(){
+            if(m_size == 0){m_head = 0; return;}
+            for(;m_size>=1;m_size--){
+                (m_data + (m_head + m_size - 1) % m_capacity)->~value_type();
+            }
+            m_head = 0; return;
+        }
+
         bool push_front(const value_type& v){
             if(m_size == m_capacity) return false;
             ++m_size;
@@ -158,7 +166,7 @@ class MathExprEval //{
 
     private:
         friend class MathExprEvalS<T>;
-        Tokenizer<double>       m_tokenizer; // FIXME:
+        Tokenizer<ValType>      m_tokenizer;
         std::stack<Token>       m_operator_stack;
         std::stack<APT<Token>*> m_val_stack;
         LevelType               m_current_level;
@@ -334,23 +342,32 @@ handle_func:
     return;
 } //}
 
+void initialization() //{
+{
+    this->m_iter     = m_tokenizer.begin();
+    this->m_iter_end = m_tokenizer.end();
+    if(m_iter != m_iter_end){
+        m_token_buf.push_front(*m_iter);
+        ++m_iter;
+    }
+    else
+        m_prev_counter = 0;
+} //}
+void clean_stack() //{
+{
+    while(!m_val_stack.empty())      m_val_stack.pop();
+    while(!m_operator_stack.empty()) m_operator_stack.pop();
+} //}
+
     public:
         MathExprEval() = delete;
+        inline Tokenizer<ValType>& GetTokenizer(){return this->m_tokenizer;}
         MathExprEval(const std::string& str): //{
             m_tokenizer(str), 
             m_current_level(0), 
             m_accept_type(id_func_lp_im),
             m_prev_counter(1),
-            m_token_buf(TOKEN_BUF_SIZE) {
-                this->m_iter     = m_tokenizer.begin();
-                this->m_iter_end = m_tokenizer.end();
-                if(m_iter != m_iter_end){
-                    m_token_buf.push_front(*m_iter);
-                    ++m_iter;
-                }
-                else
-                    m_prev_counter = 0;
-            } //}
+            m_token_buf(TOKEN_BUF_SIZE){initialization();}  //}
         APT<Token>* GetParseTree() //{
         {
             MathExpr::APT<Token>* push_apt = nullptr;
@@ -398,21 +415,56 @@ handle_func:
 }; //}
 
 template<typename T>
-class MathExprEvalS: public MathExprEval<T> //{
+class MathExprEvalS: protected MathExprEval<T> //{
 {
     public:
-    typedef typename MathExprEval<T>::SizeType  SizeType;
-    typedef typename MathExprEval<T>::LevelType LevelType;
-    typedef typename MathExprEval<T>::ValType   ValType;
+    typedef typename MathExprEval<T>::SizeType       SizeType;
+    typedef typename MathExprEval<T>::LevelType      LevelType;
+    typedef typename MathExprEval<T>::ValType        ValType;
+    typedef typename Tokenizer<ValType>::ContextType ContextType;
 
     private:
     APT<Token>* m_current_ast;
+    ContextType m_context;
 
     public:
-    MathExprEvalS(const std::string& str): MathExprEval<ValType>(str){}
+    MathExprEvalS(const std::string& str): MathExprEval<ValType>(str), m_current_ast(nullptr), m_context(){this->m_current_ast = this->GetParseTree();}
+    MathExprEvalS(): MathExprEval<ValType>(""), m_current_ast(nullptr), m_context(){}
+
+    inline APT<Token>*  GetCurrentAST(){return this->m_current_ast;}
+    inline ContextType& GetContext   (){return this->m_context;}
+
+    ValType Eval(APT<Token>* ast) //{
+    {
+        if(ast == nullptr) throw *new std::invalid_argument("invalid argument - nullptr.");
+        return ast->EvalSyntaxTree<ValType>(this->m_context, 
+                this->m_tokenizer.GetIdMap(), 
+                this->m_tokenizer.GetFuncMap(), 
+                this->m_tokenizer.GetImmediateMap());
+    } //}
+    ValType Eval(){return this->Eval(this->m_current_ast);}
+
+    void clean_current_ast() {
+        if(nullptr != this->m_current_ast) delete this->m_current_ast;
+        this->m_current_ast = nullptr;
+    }
+
+    void continue_with(const std::string& str) //{
+    {
+        this->m_current_ast = nullptr;
+        this->m_tokenizer.continue_with(str);
+        this->m_token_buf.clear_all();
+        this->clean_stack();
+        this->m_accept_type = id_func_lp_im,
+        this->m_current_level = 0;
+        this->m_prev_counter = 1;
+        this->initialization();
+        this->m_current_ast = this->GetParseTree();
+    } //}
 }; //}
 
 extern template class MathExprEval<double>;
+extern template class MathExprEvalS<double>;
 
 }
 

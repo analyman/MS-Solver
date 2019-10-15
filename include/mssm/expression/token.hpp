@@ -179,18 +179,14 @@ class FunctionMap //{
     std::map<std::string, ternary_func> m_ternary_func;
 
     public:
-    struct static_constructor {
-        static_constructor(){
-            std::cout << "hello" << std::endl;
-            std::cout << "0x" << std::hex << (long)::sin << std::endl;
+    static FunctionMap FMap;
 
-            new(&FunctionMap<T>::FMap) FunctionMap<T>;
-            FunctionMap<T>::FMap.new_unary("sin", ::sin);
-        }
-    };
     private:
+    struct static_constructor {
+        static_constructor();
+    };
     friend struct static_constructor;
-    static static_constructor __static_constructor;
+    static static_constructor __static_constructor; // SHOULD BE LAST STATIC MEMBER
 
     public:
     constexpr FunctionMap(): m_nonary_func(), m_unary_func(), m_binary_func(), m_ternary_func(){}
@@ -198,14 +194,21 @@ class FunctionMap //{
     constexpr void new_unary  (const std::string& str, const unary_func&   ff){this->m_unary_func[str]   = ff;};
     constexpr void new_binary (const std::string& str, const binary_func&  ff){this->m_binary_func[str]  = ff;};
     constexpr void new_ternary(const std::string& str, const ternary_func& ff){this->m_ternary_func[str] = ff;};
-#define GETFUNC(name) name##_func get_##name(const std::string& str){return this->m_##name##_func[str];}
+#define GETFUNC(name) name##_func get_##name(std::string& str) {return this->m_##name##_func[str];}
     GETFUNC(nonary) GETFUNC(unary) GETFUNC(binary) GETFUNC(ternary);
-    static FunctionMap FMap;
 }; //}
+#define UNARY_FUNC(name) FunctionMap<double>::FMap.new_unary(#name, ::name);
+template<typename T>
+inline FunctionMap<T>::static_constructor::static_constructor(){} // static constructor nothing
+template<>
+inline FunctionMap<double>::static_constructor::static_constructor(){ // static constructor - specification of <double> //{
+    UNARY_FUNC(sin); UNARY_FUNC(cos); UNARY_FUNC(tan); UNARY_FUNC(log);
+} //}
+
 template<typename T>
 FunctionMap<T> FunctionMap<T>::FMap;
 template<typename T>
-typename FunctionMap<T>::static_constructor __static_constructor;
+typename FunctionMap<T>::static_constructor FunctionMap<T>::__static_constructor;
 
 template<typename T>
 class Tokenizer  //{
@@ -277,6 +280,8 @@ class Tokenizer  //{
         inline IdMapType&        GetIdMap()        { return this->m_id_map;}
         inline FuncMapType&      GetFuncMap()      { return this->m_func_map;}
         inline ImmediateMapType& GetImmediateMap() { return this->m_immediate_map;}
+
+        void continue_with(const std::string& str){m_parse_str = str; m_pointer = 0;}
 
         inline IdType GetCurrentId(){return this->m_allocated_id;}
 
@@ -379,8 +384,9 @@ inline bool Tokenizer<T>::next(Token& _out) //{
             }
         } else {
             SizeType p = m_parse_str.find_first_not_of(__num_dot, m_pointer);
+            if(p == std::string::npos) p = m_parse_str.length();
             SizeType s = m_parse_str.find_first_of(".", m_pointer);
-            SizeType e = m_parse_str.find_first_of(".", s);
+            SizeType e = m_parse_str.find_first_of(".", s + 1);
             if(e != std::string::npos && e <= p) 
                 throw *new TokenizeException("uncorrect number: " + m_parse_str.substr(m_pointer, p - m_pointer));
             _out = MathExpr::Token(++m_allocated_id, MathExpr::token_enum::ImmediateValue);

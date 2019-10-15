@@ -11,5 +11,6 @@
 
 a.out
 *.o
+*.so
 *.core
 vgcore*

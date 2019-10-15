@@ -27,6 +27,7 @@ libsrc    := src/expression/expression.cpp src/matrix/matrix.cpp src/model/model
 lib       := libsmms.so
 outputDIR := build_dir
 objfile   := $(patsubst %.cpp,$(outputDIR)/%.o,$(shell echo $(libsrc) | grep -oe "[0-z]*\.cpp"))
+headers   := $(shell find ./include \( -type f \) -regex ".*\/[0-z]*\.\(hpp\|h\)")
 
 LIB: $(lib)
 
@@ -36,10 +37,10 @@ $(DOC): $(LATEXDOC)
 $(lib): $(objfile)
 	$(CXX) -shared -o $@ $^
 
-$(objfile): $(libsrc)
+$(objfile): $(libsrc) $(headers)
 	@cd $(TOPDIR)
 	@[ -d $(outputDIR) ] || mkdir $(outputDIR)
-	cd $(outputDIR) && $(CXX) -fPIC -c $(CXXFLAGA) $(patsubst %,../%,$^) && cd $(TOPDIR)
+	cd $(outputDIR) && $(CXX) -fPIC -c $(CXXFLAGA) $(patsubst %,../%,$(libsrc)) && cd $(TOPDIR)
 
 clean:
 	@[ -d $(outputDIR) ] && $(rm) -r $(outputDIR)

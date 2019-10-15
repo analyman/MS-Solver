@@ -21,10 +21,30 @@ void testB()
     delete T;
 }
 
+void testC()
+{
+    MathExpr::MathExprEval<double> TC = MathExpr::MathExprEval<double>("");
+    APT<Token>* ps =  TC.GetParseTree();
+    if(ps == nullptr) return;
+    typename Tokenizer<double>::ContextType context;
+    double r = ps->EvalSyntaxTree<double>(context, TC.GetTokenizer().GetIdMap(), TC.GetTokenizer().GetFuncMap(), TC.GetTokenizer().GetImmediateMap());
+    std::cout << r << std::endl;
+}
+
+void testD()
+{
+    MathExpr::MathExprEvalS<double> TC = MathExpr::MathExprEvalS<double>("x = 100");
+    double x = TC.Eval();
+    TC.clean_current_ast();
+    TC.continue_with("x * x");
+    double y = TC.Eval();
+    TC.clean_current_ast();
+    std::cout << "x = " << x << std::endl;
+    std::cout << "y = " << y << std::endl;
+}
+
 int main()
 {
-//    testB();
-    typename FunctionMap<double>::unary_func _sin = FunctionMap<double>::FMap.get_unary("sin");
-    double x = sin(1);
-    std::cout << std::hex << "0x" << (long)_sin << "  sin(1) = " << x << std::endl;
+    testD();
+    return 0;
 }

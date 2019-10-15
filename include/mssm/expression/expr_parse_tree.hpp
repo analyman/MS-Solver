@@ -2,10 +2,10 @@
 #define _EXPR_PARSE_TREE_HPP
 
 #include "token.hpp"
-#include "exception"
 #include <cassert>
 #include <cstring>
 #include <cstdlib>
+#include <stdexcept>
 
 namespace MathExpr {
 
@@ -25,6 +25,9 @@ template<typename T> class APT;
 template<typename T>
 std::ostream& operator_out_aux(std::ostream& o_s, const APT<T>& t);
 
+template<typename T> T t_pow(const T&, const T&){return T(0);}
+template<> double t_pow(const double& a, const double& b){return ::pow(a, b);}
+template<> float  t_pow(const float & a, const float & b){return ::pow(a, b);}
 enum Operand_type //{
 {
     Unary,
@@ -103,21 +106,97 @@ class APT //{
         Token& GetToken(){return this->m_token;}
 
         template<typename V>
-        V EvalSyntaxTree(const typename MathExpr::Tokenizer<V>::ContextType&      _context,
-                         const typename MathExpr::Tokenizer<V>::IdMapType&        _idMap,
-                         const typename MathExpr::Tokenizer<V>::FuncMapType&      _funcMap,
-                         const typename MathExpr::Tokenizer<V>::ImmediateMapType& _immMap)
-        { // TODO
+        V EvalSyntaxTree(typename MathExpr::Tokenizer<V>::ContextType&      _context,
+                         typename MathExpr::Tokenizer<V>::IdMapType&        _idMap,
+                         typename MathExpr::Tokenizer<V>::FuncMapType&      _funcMap,
+                         typename MathExpr::Tokenizer<V>::ImmediateMapType& _immMap) //{
+        {
+            FunctionMap<V>& FGET = FunctionMap<V>::FMap;
             const Token& t = this->m_token;
+            V arg1, arg2, arg3;
+            APT* ch_1 = this->m_child[0], *ch_2 = this->m_child[1], *ch_3 = this->m_child[2];
             switch(t.GetType()){
                 case token_enum::Delimiter:
                 case token_enum::LP:
                 case token_enum::RP:
-                    throw *new parseTreeException("unexcepted token.");
+                    throw *new std::runtime_error("unexcepted token.");
                 case token_enum::Function:
-                    return V(0);
+                    {// HANGLE Function //{
+                        std::string& fname = _funcMap[t.GetId()];
+                        typename FunctionMap<V>::nonary_func  n_f;
+                        typename FunctionMap<V>::unary_func   u_f;
+                        typename FunctionMap<V>::binary_func  b_f;
+                        typename FunctionMap<V>::ternary_func t_f;
+                        switch(this->m_operand_type){
+                            case Operand_type::Leaf:
+                                n_f = FGET.get_nonary(fname);
+                                if(!n_f) throw *new std::runtime_error("unknow function: " + fname + "()");
+                                return n_f();
+                            case Operand_type::Unary:
+                                u_f = FGET.get_unary(fname);
+                                if(!u_f) throw *new std::runtime_error("unknow function: " + fname + "(x)");
+                                arg1 = ch_1->EvalSyntaxTree<V>(_context, _idMap, _funcMap ,_immMap);
+                                return u_f(arg1);
+                            case Operand_type::Binary:
+                                b_f = FGET.get_binary(fname);
+                                if(!b_f) throw *new std::runtime_error("unknow function: " + fname + "(x, y)");
+                                arg1 = ch_1->EvalSyntaxTree<V>(_context, _idMap, _funcMap ,_immMap);
+                                arg2 = ch_2->EvalSyntaxTree<V>(_context, _idMap, _funcMap ,_immMap);
+                                return b_f(arg1, arg2);
+                            case Operand_type::Ternary:
+                                t_f = FGET.get_ternary(fname);
+                                if(!t_f) throw *new std::runtime_error("unknow function: " + fname + "(x, y, z)");
+                                arg1 = ch_1->EvalSyntaxTree<V>(_context, _idMap, _funcMap ,_immMap);
+                                arg2 = ch_2->EvalSyntaxTree<V>(_context, _idMap, _funcMap ,_immMap);
+                                arg3 = ch_3->EvalSyntaxTree<V>(_context, _idMap, _funcMap ,_immMap);
+                                return t_f(arg1, arg2, arg3);
+                            default:
+                                throw *new std::runtime_error("unknow function: " + fname);
+                        }
+                    } //}
+                case token_enum::OperatorA:
+                case token_enum::OperatorB:
+                case token_enum::OperatorC:
+                    arg1 = ch_1->EvalSyntaxTree<V>(_context, _idMap, _funcMap, _immMap);
+                    arg2 = ch_2->EvalSyntaxTree<V>(_context, _idMap, _funcMap, _immMap);
+                    switch(t.GetOpType()){
+                        case operator_type::OP_pow:
+                            return t_pow(arg1, arg2);
+                        case operator_type::OP_time:
+                            return arg1 * arg2;
+                        case operator_type::OP_div:
+                            return arg1 / arg2;
+                        case operator_type::OP_plus:
+                            return arg1 + arg2;
+                        case operator_type::OP_minus:
+                            return arg1 - arg2;
+                        default:
+                            throw *new std::runtime_error("unexcepted token.");
+                    }
+
+                case token_enum::OperatorD: 
+                    {
+                        assert(ch_1->GetToken().GetType() == token_enum::Id);
+                        arg2 = ch_2->EvalSyntaxTree<V>(_context, _idMap, _funcMap, _immMap);
+                        const std::string& id_str1 = _idMap[ch_1->GetToken().GetId()];
+                        if(id_str1 == "") throw *new std::runtime_error("error ID or something else wrong.");
+                        _context[id_str1] = arg2;
+                        return arg2;
+                    }
+                case token_enum::Id:
+                    {
+                        const std::string& id_str2 = _idMap[t.GetId()];
+                        if(id_str2 == "") throw *new std::runtime_error("error ID or something else wrong.");
+                        return _context[id_str2];
+                    }
+                case token_enum::ImmediateValue:
+                    {
+                        return _immMap[t.GetId()];
+                    }
+                default:
+                    throw *new std::runtime_error("unexcepted token.");
             }
-        }
+        } //}
 }; //}
 
 template<typename T>
@@ -197,6 +276,14 @@ std::ostream& operator<<(std::ostream& o_s, const APT<T>& t){ //{
     o_s.flags(f);
     return o_s;
 } //}
+
+template class APT<Token>;
+template double APT<Token>::EvalSyntaxTree<double>(
+        typename MathExpr::Tokenizer<double>::ContextType&      _context,
+        typename MathExpr::Tokenizer<double>::IdMapType&        _idMap,
+        typename MathExpr::Tokenizer<double>::FuncMapType&      _funcMap,
+        typename MathExpr::Tokenizer<double>::ImmediateMapType& _immMap
+        );
 
 }
 #endif // _EXPR_PARSE_TREE_HPP
