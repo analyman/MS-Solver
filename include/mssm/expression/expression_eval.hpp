@@ -3,13 +3,28 @@
 
 #include "token.hpp"
 #include "expr_parse_tree.hpp"
+#include "../utils/exception.hpp"
 #include <stack>
 #include <type_traits>
 #include <stdexcept>
+#include <sstream>
 
 #include <cstdlib>
 
+#define safedelete(ptr) if(ptr != nullptr){delete ptr; ptr = nullptr;}
+
 namespace MathExpr {
+
+template<typename T>
+struct _TernaryHolder //{
+{
+    T* m_cons1;
+    T* m_cons2;
+    T* m_var1;
+    bool m_1;
+    bool m_2;
+    bool m_3;
+}; //}
 
 template<typename T>
 class CircularList //{
@@ -144,17 +159,12 @@ accept_token_type nextAcceptance(token_enum t) //{
     }
 } //}
 
-class ParseXException //{
-{
-    private:
-        std::string msg;
+class ParseXException: public SMSolver::SMSolverException {
     public:
-        ParseXException(const std::string& _s): msg(_s){}
-        ParseXException(std::string&& _s): msg(std::move(_s)){}
-        ParseXException(const char* _c_str): msg(_c_str){}
-
-        virtual const char * what() const noexcept {return msg.c_str();}
-}; //}
+    ParseXException(const char*        s): SMSolver::SMSolverException(s){}
+    ParseXException(const std::string& s): SMSolver::SMSolverException(s){}
+    const char* what() const noexcept{std::cout << this->msg << std::endl; return this->msg.c_str();}
+};
 
 template<typename T> class MathExprEvalS;
 #define TOKEN_BUF_SIZE 10
@@ -416,17 +426,315 @@ void clean_stack() //{
 }; //}
 
 template<typename T>
-class MathExprEvalS: protected MathExprEval<T> //{
+class MathExprEvalS: public MathExprEval<T> //{
 {
     public:
-    typedef typename MathExprEval<T>::SizeType       SizeType;
-    typedef typename MathExprEval<T>::LevelType      LevelType;
-    typedef typename MathExprEval<T>::ValType        ValType;
-    typedef typename Tokenizer<ValType>::ContextType ContextType;
+    typedef typename MathExprEval<T>::SizeType            SizeType;
+    typedef typename MathExprEval<T>::LevelType           LevelType;
+    typedef typename MathExprEval<T>::ValType             ValType;
+    typedef typename Tokenizer<ValType>::ContextType      ContextType;
+    typedef typename Tokenizer<ValType>::FuncMapType      FuncMapType;
+    typedef typename Tokenizer<ValType>::IdMapType        IdMapType;
+    typedef typename Tokenizer<ValType>::ImmediateMapType ImmediateMapType;
+    typedef typename Token::IdType                        IdType;
 
     private:
     APT<Token>* m_current_ast;
     ContextType m_context;
+
+    template<typename TT>
+    std::ostringstream& toStringAux(std::ostringstream& o_s, const APT<TT>& t, const token_enum& t_type = token_enum::LP) //{
+    {
+        const TT& c = t.m_token;
+        FuncMapType&      fmap  = this->m_tokenizer.GetFuncMap();
+        ImmediateMapType& imap  = this->m_tokenizer.GetImmediateMap();
+        IdMapType&        idmap = this->m_tokenizer.GetIdMap();
+        std::string f_name;
+        switch(c.m_token_type){
+            case token_enum::Id:
+                o_s << idmap[c.m_id];
+                break;
+            case token_enum::ImmediateValue:
+                o_s << imap[c.m_id];
+                break;
+            case token_enum::OperatorA:
+                toStringAux(o_s, *t.m_child[0], token_enum::OperatorA);
+                o_s << "^";
+                toStringAux(o_s, *t.m_child[1], token_enum::OperatorA);
+                break;
+            case token_enum::OperatorB:
+                if(t_type == token_enum::OperatorA)
+                    o_s << "(";
+                toStringAux(o_s, *t.m_child[0], token_enum::OperatorB);
+                if(c.m_op_type == operator_type::OP_time)
+                    o_s << " * ";
+                else
+                    o_s << " / ";
+                toStringAux(o_s, *t.m_child[1], token_enum::OperatorB);
+                if(t_type == token_enum::OperatorA)
+                    o_s << ")";
+                break;
+            case token_enum::OperatorC:
+                if(t_type == token_enum::OperatorA || t_type == token_enum::OperatorB)
+                    o_s << "(";
+                toStringAux(o_s, *t.m_child[0], token_enum::OperatorC);
+                if(c.m_op_type == operator_type::OP_plus)
+                    o_s << " + ";
+                else
+                    o_s << " - ";
+                toStringAux(o_s, *t.m_child[1], token_enum::OperatorC);
+                if(t_type == token_enum::OperatorA || t_type == token_enum::OperatorB)
+                    o_s << ")";
+                break;
+            case token_enum::OperatorD:
+                if(t_type == token_enum::OperatorA || t_type == token_enum::OperatorB || t_type == token_enum::OperatorC)
+                    o_s << "(";
+                toStringAux(o_s, *t.m_child[0]);
+                o_s << " = ";
+                toStringAux(o_s, *t.m_child[1]);
+                if(t_type == token_enum::OperatorA || t_type == token_enum::OperatorB || t_type == token_enum::OperatorC)
+                    o_s << ")";
+                break;
+            case token_enum::Function:
+                switch(t.m_operand_type){
+                    case Operand_type::Leaf:
+                        o_s << fmap[c.m_id] << "()";
+                        break;
+                    case Operand_type::Unary:
+                        o_s << fmap[c.m_id] << "(";
+                        toStringAux(o_s, *t.m_child[0]); 
+                        o_s << ")";
+                        break;
+                    case Operand_type::Binary:
+                        o_s << fmap[c.m_id] << "(";
+                        toStringAux(o_s, *t.m_child[0]); 
+                        o_s << ", ";
+                        toStringAux(o_s, *t.m_child[1]); 
+                        o_s << ")";
+                        break;
+                    case Operand_type::Ternary:
+                        o_s << fmap[c.m_id] << "(";
+                        toStringAux(o_s, *t.m_child[0]); 
+                        o_s << ", ";
+                        toStringAux(o_s, *t.m_child[1]); 
+                        o_s << ", ";
+                        toStringAux(o_s, *t.m_child[2]); 
+                        o_s << ")";
+                        break;
+                }
+            default:
+                break;
+        }
+        return o_s;
+    } //}
+    APT<Token>* helper_derivative_of(const std::string& _id, APT<Token>* t = nullptr) //{
+    {
+        if(t == nullptr) t = this->m_current_ast;
+        APT<Token>* ret_ast = nullptr;
+        APT<Token> *aux1 = nullptr, *aux2 = nullptr, *aux3 = nullptr, *aux4 = nullptr, *aux5 = nullptr;
+        if(!t->decsendants_has_id(_id, this->m_tokenizer.GetIdMap())){
+            ret_ast = new APT<Token>(Token(this->m_tokenizer.new_imm(0), token_enum::ImmediateValue), Operand_type::Leaf);
+            return ret_ast;
+        }
+        const Token& c = t->m_token;
+        FuncMapType&      fmap  = this->m_tokenizer.GetFuncMap();
+        ImmediateMapType& imap  = this->m_tokenizer.GetImmediateMap();
+        IdMapType&        idmap = this->m_tokenizer.GetIdMap();
+        switch(c.m_token_type){
+            case token_enum::Id:
+                return new APT<Token>(Token(this->m_tokenizer.new_imm(1), token_enum::ImmediateValue), Operand_type::Leaf);
+            case token_enum::OperatorA:
+                if(t->m_child[0]->decsendants_has_id(_id, this->m_tokenizer.GetIdMap()) && 
+                   t->m_child[1]->decsendants_has_id(_id, this->m_tokenizer.GetIdMap()))
+                    throw *new ParseXException("Unimplemented");
+                if(t->m_child[0]->decsendants_has_id(_id, this->m_tokenizer.GetIdMap())){ // d(f(x)^k)/dx = k * f(x) ^ (k - 1)
+                    aux1 = new APT<Token>();
+                    *aux1 = *t->m_child[1];
+                    aux2 = new APT<Token>(Token(this->m_tokenizer.new_imm(1), token_enum::ImmediateValue), Operand_type::Leaf);
+                    aux3 = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorC, operator_type::OP_minus),
+                            Operand_type::Binary, aux1, aux2);
+                    aux4 = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorA, operator_type::OP_pow),
+                            Operand_type::Binary, new APT<Token>(*t->m_child[0]), aux3);
+                    ret_ast = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                            Operand_type::Binary, new APT<Token>(*t->m_child[1]), aux4);
+                    return ret_ast;
+                } else { // d(k^f(x))/dx = d(f(x))/dx * ln(k) * k^f(x)
+                    aux1  = new APT<Token>();
+                    *aux1 = *t->m_child[0];
+                    aux2  = new APT<Token>();
+                    *aux2 = *t->m_child[1];
+                    aux2  = this->helper_derivative_of(_id, aux2);
+                    aux3  = new APT<Token>(
+                            Token(this->m_tokenizer.new_func("log"), token_enum::Function, operator_type::OP_NONE),
+                            Operand_type::Unary, aux1);
+                    aux4  = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                            Operand_type::Binary, aux2, aux3);
+                    ret_ast = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                            Operand_type::Binary, t, aux4);
+                    return ret_ast;
+                }
+            case token_enum::OperatorB:
+                if(t->m_token.GetOpType() == operator_type::OP_time){ // f(x) * g(x)
+                    aux1 = this->helper_derivative_of(_id, t->m_child[0]);
+                    aux2 = this->helper_derivative_of(_id, t->m_child[1]);
+                    aux3 = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                            Operand_type::Binary, aux1, new APT<Token>(*t->m_child[1]));
+                    aux4 = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                            Operand_type::Binary, aux2, new APT<Token>(*t->m_child[0]));
+                    ret_ast = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorC, operator_type::OP_plus),
+                            Operand_type::Binary, aux3, aux4);
+                    return ret_ast;
+                } else { // f(x) / g(x)
+                    aux5  = new APT<Token>();
+                    *aux5 = *t->m_child[1];
+                    aux1  = this->helper_derivative_of(_id, t->m_child[0]);
+                    aux2  = this->helper_derivative_of(_id, t->m_child[1]);
+                    aux3  = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                            Operand_type::Binary, aux1, new APT<Token>(*t->m_child[1]));
+                    aux4  = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                            Operand_type::Binary, aux2, new APT<Token>(*t->m_child[0]));
+                    aux3  = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorC, operator_type::OP_minus),
+                            Operand_type::Binary, aux3, aux4);
+                    aux4  = new APT<Token>(
+                            Token(this->m_tokenizer.new_imm(2), token_enum::ImmediateValue, operator_type::OP_NONE),
+                            Operand_type::Leaf);
+                    aux4  = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorA, operator_type::OP_pow),
+                            Operand_type::Binary, aux5, aux4);
+                    ret_ast = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_div),
+                            Operand_type::Binary, aux3, aux4);
+                    return ret_ast;
+                }
+            case token_enum::OperatorC:
+                aux1 = this->helper_derivative_of(_id, t->m_child[0]);
+                aux2 = this->helper_derivative_of(_id, t->m_child[1]);
+                if(t->m_token.GetOpType() == operator_type::OP_plus)
+                    ret_ast = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorC, operator_type::OP_plus),
+                            Operand_type::Binary, aux1, aux2);
+                else
+                    ret_ast = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorC, operator_type::OP_minus),
+                            Operand_type::Binary, aux1, aux2);
+                return ret_ast;
+            case token_enum::OperatorD:
+                return helper_derivative_of(_id, t->m_child[1]);
+            case token_enum::Function: // only unary function
+                if(t->m_operand_type == Operand_type::Leaf){
+                    ret_ast = new APT<Token>(Token(this->m_tokenizer.new_imm(0), token_enum::ImmediateValue), Operand_type::Leaf);
+                    return ret_ast;
+                }
+                if(t->m_operand_type != Operand_type::Unary)
+                    throw *new ParseXException("unexcepted function");
+                aux1 = this->helper_derivative_of(_id, t->m_child[0]);
+                if(fmap[t->m_token.m_id] == "log"){
+                    aux2 = new APT<Token>(Token(this->m_tokenizer.new_imm(1), token_enum::ImmediateValue), Operand_type::Leaf);
+                    aux3 = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_div),
+                            Operand_type::Binary, aux2, new APT<Token>(*t->m_child[0]));
+                    ret_ast = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                            Operand_type::Binary, aux1, aux3);
+                    return ret_ast;
+                } else if (fmap[t->m_token.m_id] == "log2") {
+#define E_CONS 2.718281828459045235360287471352662
+                    aux2 = new APT<Token>(Token(this->m_tokenizer.new_imm(E_CONS), token_enum::ImmediateValue), Operand_type::Leaf);
+                    aux3 = new APT<Token>(Token(this->m_tokenizer.new_func("log2"), token_enum::Function), Operand_type::Unary, aux2);
+                    aux4 = new APT<Token>(Token(this->m_tokenizer.new_func("log"), token_enum::Function), Operand_type::Unary, new APT<Token>(*t->m_child[0]));
+                    aux2 = this->helper_derivative_of(_id, aux4);
+                    delete aux1; delete aux4;
+                    ret_ast = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                            Operand_type::Binary, aux3, aux2);
+                    return ret_ast;
+                } else if (fmap[t->m_token.m_id] == "log10") {
+                    aux2 = new APT<Token>(Token(this->m_tokenizer.new_imm(E_CONS), token_enum::ImmediateValue), Operand_type::Leaf);
+                    aux3 = new APT<Token>(Token(this->m_tokenizer.new_func("log10"), token_enum::Function), Operand_type::Unary, aux2);
+                    aux4 = new APT<Token>(Token(this->m_tokenizer.new_func("log"), token_enum::Function), Operand_type::Unary, new APT<Token>(*t->m_child[0]));
+                    aux2 = this->helper_derivative_of(_id, aux4);
+                    delete aux1; delete aux4;
+                    ret_ast = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                            Operand_type::Binary, aux3, aux2);
+                    return ret_ast;
+                } else if (fmap[t->m_token.m_id] == "sin") {
+                    aux2 = new APT<Token>(Token(this->m_tokenizer.new_func("cos"), token_enum::Function), Operand_type::Unary, new APT<Token>(*t->m_child[0]));
+                    ret_ast = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                            Operand_type::Binary, aux1, aux2);
+                    return ret_ast;
+                } else if (fmap[t->m_token.m_id] == "cos") {
+                    aux2 = new APT<Token>(Token(this->m_tokenizer.new_func("sin"), token_enum::Function), Operand_type::Unary, new APT<Token>(*t->m_child[0]));
+                    aux3 = new APT<Token>(Token(this->m_tokenizer.new_imm(0), token_enum::ImmediateValue), Operand_type::Leaf);
+                    aux4 = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorC, operator_type::OP_minus),
+                            Operand_type::Binary, aux3, aux2);
+                    ret_ast = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                            Operand_type::Binary, aux1, aux4);
+                    return ret_ast;
+                } else if (fmap[t->m_token.m_id] == "tan") {
+                    aux2 = new APT<Token>(Token(this->m_tokenizer.new_func("cos"), token_enum::Function), Operand_type::Unary, new APT<Token>(*t->m_child[0]));
+                    aux3 = new APT<Token>(Token(this->m_tokenizer.new_imm(2), token_enum::ImmediateValue), Operand_type::Leaf);
+                    aux4 = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorA, operator_type::OP_pow),
+                            Operand_type::Binary, aux2, aux3);
+                    aux3 = new APT<Token>(Token(this->m_tokenizer.new_imm(1), token_enum::ImmediateValue), Operand_type::Leaf);
+                    aux5 = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_div),
+                            Operand_type::Binary, aux3, aux4);
+                    ret_ast = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                            Operand_type::Binary, aux1, aux5);
+                    return ret_ast;
+                } else if (fmap[t->m_token.m_id] == "sinh") {
+                    aux2 = new APT<Token>(Token(this->m_tokenizer.new_func("cosh"), token_enum::Function), Operand_type::Unary, new APT<Token>(*t->m_child[0]));
+                    ret_ast = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                            Operand_type::Binary, aux1, aux2);
+                    return ret_ast;
+                } else if (fmap[t->m_token.m_id] == "cosh") {
+                    aux2 = new APT<Token>(Token(this->m_tokenizer.new_func("sinh"), token_enum::Function), Operand_type::Unary, new APT<Token>(*t->m_child[0]));
+                    ret_ast = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                            Operand_type::Binary, aux1, aux2);
+                    return ret_ast;
+                } else if (fmap[t->m_token.m_id] == "tanh") {
+                    aux2 = new APT<Token>(Token(this->m_tokenizer.new_func("cosh"), token_enum::Function), Operand_type::Unary, new APT<Token>(*t->m_child[0]));
+                    aux3 = new APT<Token>(Token(this->m_tokenizer.new_imm(2), token_enum::ImmediateValue), Operand_type::Leaf);
+                    aux4 = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorA, operator_type::OP_pow),
+                            Operand_type::Binary, aux2, aux3);
+                    aux3 = new APT<Token>(Token(this->m_tokenizer.new_imm(1), token_enum::ImmediateValue), Operand_type::Leaf);
+                    aux5 = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_div),
+                            Operand_type::Binary, aux3, aux4);
+                    ret_ast = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                            Operand_type::Binary, aux1, aux5);
+                    return ret_ast;
+                } else {
+                    throw *new ParseXException("Derivative of unknown function: " + fmap[t->m_token.GetId()]);
+                }
+            case token_enum::ImmediateValue:
+            case token_enum::Delimiter:
+            case token_enum::LP:
+            case token_enum::RP:
+                throw *new ParseXException("helper_derivative_of(): unexcepted exception.");
+        }
+    } //}
 
     public:
     MathExprEvalS(const std::string& str): MathExprEval<ValType>(str), m_current_ast(nullptr), m_context(){this->m_current_ast = this->GetParseTree();}
@@ -444,6 +752,359 @@ class MathExprEvalS: protected MathExprEval<T> //{
                 this->m_tokenizer.GetImmediateMap());
     } //}
     ValType Eval(){return this->Eval(this->m_current_ast);}
+
+    std::string toString(APT<Token>* ast) //{
+    {
+        std::ostringstream str;
+        this->toStringAux(str, *ast);
+        return str.str();
+    } //}
+    std::string toString() //{
+    {
+        return toString(this->m_current_ast);
+    } //}
+
+    APT<Token>* derivative_of(const std::string& _id, APT<Token>* t = nullptr) //{
+    {
+        APT<Token>* xxx = this->simplified_ast(this->helper_derivative_of(_id, t));
+        xxx->fix_parent();
+        return xxx;
+    } //}
+    APT<Token>* derivative_of(IdType num_id, APT<Token>* t = nullptr) //{
+    {
+        if(t == nullptr) t = this->m_current_ast;
+        const std::string& _id = this->m_tokenizer.GetIdMap()[num_id];
+        if(_id == "") throw *new ParseXException("Can't found identify <"   "> in this environment.");
+        return this->derivative_of(_id, t);
+    } //}
+
+    APT<Token>* simplified_ast(APT<Token>* t) //{
+    {
+        ValType imm_result;
+        APT<Token> *aux1 = nullptr, *aux2 = nullptr, *aux3 = nullptr;
+        FuncMapType&      fmap  = this->m_tokenizer.GetFuncMap();
+        ImmediateMapType& imap  = this->m_tokenizer.GetImmediateMap();
+        IdMapType&        idmap = this->m_tokenizer.GetIdMap();
+        if(t->is_constant()) {
+            if(t->m_token.GetType() == token_enum::ImmediateValue)
+                return t;
+            ValType result = this->Eval(t);
+            t->clear_children();
+            aux1 = new APT<Token>(Token(this->m_tokenizer.new_imm(result), token_enum::ImmediateValue), Operand_type::Leaf);
+            *t = std::move(*aux1);
+            delete aux1;
+            aux1 = nullptr;
+            return t;
+        }
+        switch(t->m_token.m_op_type) //{
+        {
+            case OP_time:
+            case OP_div:
+            case OP_plus:
+            case OP_minus:
+            case OP_pow:
+                this->simplified_ast(t->m_child[0]);
+                this->simplified_ast(t->m_child[1]);
+                if(!(t->m_child[0]->is_constant() || t->m_child[1]->is_constant()))
+                    return t;
+                break;
+            case OP_assign:
+                this->simplified_ast(t->m_child[1]);
+                return t;
+            case OP_NONE:
+                switch(t->m_operand_type){
+                    case Unary:
+                        this->simplified_ast(t->m_child[0]);
+                        return t;
+                    case Binary:
+                        this->simplified_ast(t->m_child[0]);
+                        this->simplified_ast(t->m_child[1]);
+                        return t;
+                    case Ternary:
+                        this->simplified_ast(t->m_child[0]);
+                        this->simplified_ast(t->m_child[1]);
+                        this->simplified_ast(t->m_child[2]);
+                        return t;
+                    default:
+                        return t;
+                }
+        } //}
+
+        // x + 0, x - 0, x * 0, 0 / x, x^0 etc.
+        // x*1, x/1, x^1 etc.
+#define __IMM__(x) new APT<Token>(Token(this->m_tokenizer.new_imm(x), token_enum::ImmediateValue), Operand_type::Leaf)
+#define _IMM_(x)  (aux2 = __IMM__(x)); delete aux2; aux2 = nullptr;
+#define _IMM_ZERO _IMM_(0)
+#define _IMM_ONE  _IMM_(1)
+        switch(t->m_token.m_op_type) //{
+        {
+            case OP_time: //{
+                if(t->m_child[0]->m_token.GetType() == token_enum::ImmediateValue){
+                    if(imap[t->m_child[0]->m_token.GetId()] == 0){
+                        t->clear_children();
+                        *t = *_IMM_ZERO;
+                        break;
+                    } else if(imap[t->m_child[0]->m_token.GetId()] == 1){
+                        aux1 = t->m_child[1];
+                        t->m_child[1] = nullptr;
+                        t->clear_children();
+                        *t = std::move(*aux1);
+                        delete aux1;
+                        break;
+                    }
+                }
+                if(t->m_child[1]->m_token.GetType() == token_enum::ImmediateValue){
+                    if(imap[t->m_child[1]->m_token.GetId()] == 0){
+                        t->clear_children();
+                        *t = *_IMM_ZERO;
+                        break;
+                    } else if(imap[t->m_child[1]->m_token.GetId()] == 1){
+                        aux1 = t->m_child[0];
+                        t->m_child[0] = nullptr;
+                        t->clear_children();
+                        *t = std::move(*aux1);
+                        delete aux1;
+                        break;
+                    }
+                } break; //}
+            case OP_div: //{
+                if(t->m_child[0]->m_token.GetType() == token_enum::ImmediateValue){
+                    if(imap[t->m_child[0]->m_token.GetId()] == 0){
+                        t->clear_children();
+                        *t = *_IMM_ZERO;
+                        break;
+                    }
+                }
+                if(t->m_child[1]->m_token.GetType() == token_enum::ImmediateValue){
+                    if(imap[t->m_child[1]->m_token.GetId()] == 1){
+                        aux1 = t->m_child[0];
+                        t->m_child[0] = nullptr;
+                        t->clear_children();
+                        *t = std::move(*aux1);
+                        delete aux1;
+                        break;
+                    }
+                } break; //}
+            case OP_plus: //{
+                if(t->m_child[0]->m_token.GetType() == token_enum::ImmediateValue){
+                    if(imap[t->m_child[0]->m_token.GetId()] == 0){
+                        aux1 = t->m_child[1];
+                        t->m_child[1] = nullptr;
+                        t->clear_children();
+                        *t = std::move(*aux1);
+                        delete aux1;
+                        break;
+                    }
+                }
+                if(t->m_child[1]->m_token.GetType() == token_enum::ImmediateValue){
+                    if(imap[t->m_child[1]->m_token.GetId()] == 0){
+                        aux1 = t->m_child[0];
+                        t->m_child[0] = nullptr;
+                        t->clear_children();
+                        *t = std::move(*aux1);
+                        delete aux1;
+                        break;
+                    }
+                } break; //}
+            case OP_minus: //{
+                if(t->m_child[1]->m_token.GetType() == token_enum::ImmediateValue){
+                    if(imap[t->m_child[1]->m_token.GetId()] == 0){
+                        aux1 = t->m_child[0];
+                        t->m_child[0] = nullptr;
+                        t->clear_children();
+                        *t = std::move(*aux1);
+                        delete aux1;
+                        break;
+                    }
+                } break; //}
+            case OP_pow: //{
+                if(t->m_child[1]->m_token.GetType() == token_enum::ImmediateValue){
+                    if(imap[t->m_child[1]->m_token.GetId()] == 0){
+                        t->clear_children();
+                        *t = *_IMM_ONE;
+                        break;
+                    } else if(imap[t->m_child[1]->m_token.GetId()] == 1){
+                        aux1 = t->m_child[0];
+                        t->m_child[0] = nullptr;
+                        t->clear_children();
+                        *t = std::move(*aux1);
+                        delete aux1;
+                        break;
+                    }
+                }
+                if(t->m_child[0]->m_token.GetType() == token_enum::ImmediateValue){
+                    if(imap[t->m_child[0]->m_token.GetId()] == 0){
+                        t->clear_children();
+                        *t = *_IMM_ZERO;
+                        break;
+                    } else if(imap[t->m_child[0]->m_token.GetId()] == 1){
+                        t->clear_children();
+                        *t = *_IMM_ONE;
+                        break;
+                    }
+                } break; //}
+            case OP_NONE:
+            case OP_assign:
+                throw *new ParseXException("IMPOSSIBLE");
+        } //}
+
+        // <cons> * <var> * <cons>
+        _TernaryHolder<APT<Token>> th;
+        switch(t->m_token.GetType()) //{
+        {
+            case token_enum::OperatorA:
+            case token_enum::OperatorD:
+            case token_enum::Delimiter:
+            case token_enum::LP:
+            case token_enum::RP:
+            case token_enum::ImmediateValue:
+            case token_enum::Id:
+            case token_enum::Function:
+                break;
+            case token_enum::OperatorB: //{
+                if(t->m_child[0]->is_constant()) {
+                    th.m_cons1 = t->m_child[0];
+                    th.m_1 = true;
+                    if(t->m_child[1]->m_token.GetType() != token_enum::OperatorB)
+                        break;
+                    if(t->m_child[1]->m_child[0]->is_constant()){
+                        th.m_cons2 = t->m_child[1]->m_child[0];
+                        th.m_var1  = t->m_child[1]->m_child[1];
+                        th.m_2 = t->m_token.GetOpType() == operator_type::OP_time;
+                        th.m_3 = t->m_token.GetOpType() == t->m_child[1]->m_token.GetOpType();
+                        t->m_child[1]->m_child[0] = nullptr;
+                        t->m_child[1]->m_child[1] = nullptr;
+                        delete t->m_child[1];
+                    } else if (t->m_child[1]->m_child[1]->is_constant()){
+                        th.m_cons2 = t->m_child[1]->m_child[1];
+                        th.m_var1  = t->m_child[1]->m_child[0];
+                        th.m_3 = t->m_token.GetOpType() == operator_type::OP_time;
+                        th.m_2 = t->m_token.GetOpType() == t->m_child[1]->m_token.GetOpType();
+                        t->m_child[1]->m_child[0] = nullptr;
+                        t->m_child[1]->m_child[1] = nullptr;
+                        delete t->m_child[1];
+                    } else break;
+                } else if (t->m_child[1]->is_constant()) {
+                    th.m_cons1 = t->m_child[1];
+                    th.m_1 = t->m_token.GetOpType() == operator_type::OP_time;
+                    if(t->m_child[0]->m_token.GetType() != token_enum::OperatorB)
+                        break;
+                    if(t->m_child[0]->m_child[0]->is_constant()){
+                        th.m_cons2 = t->m_child[0]->m_child[0];
+                        th.m_var1  = t->m_child[0]->m_child[1];
+                        th.m_2 = true;
+                        th.m_3 = t->m_child[0]->m_token.GetOpType() == operator_type::OP_time;
+                        t->m_child[0]->m_child[0] = nullptr;
+                        t->m_child[0]->m_child[1] = nullptr;
+                        delete t->m_child[0];
+                    } else if (t->m_child[0]->m_child[1]->is_constant()){
+                        th.m_cons2 = t->m_child[0]->m_child[1];
+                        th.m_var1  = t->m_child[0]->m_child[0];
+                        th.m_3 = true;
+                        th.m_2 = t->m_child[0]->m_token.GetOpType() == operator_type::OP_time;
+                        t->m_child[0]->m_child[0] = nullptr;
+                        t->m_child[0]->m_child[1] = nullptr;
+                        delete t->m_child[0];
+                    } else break;
+                } else break;
+                if(th.m_1 == th.m_2)
+                    aux1 = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time), Operand_type::Binary, 
+                            th.m_cons1, th.m_cons2);
+                else if (th.m_1 == true)
+                    aux1 = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_div), Operand_type::Binary, 
+                            th.m_cons1, th.m_cons2);
+                else
+                    aux1 = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_div), Operand_type::Binary, 
+                            th.m_cons2, th.m_cons1);
+                if(th.m_3 && (th.m_1 || th.m_2)) t->m_token.m_op_type = operator_type::OP_time;
+                else t->m_token.m_op_type = operator_type::OP_div;
+                imm_result = this->Eval(aux1);
+                aux3 = __IMM__(imm_result);
+                delete aux1; aux1 = nullptr;
+                if(th.m_3 == true){
+                    t->m_child[0] = th.m_var1;
+                    t->m_child[1] = aux3;
+                    aux1 = nullptr;
+                } else {
+                    t->m_child[1] = th.m_var1;
+                    t->m_child[0] = aux3;
+                    aux1 = nullptr;
+                }
+                this->simplified_ast(t);
+                break; //}
+            case token_enum::OperatorC: //{
+                if(t->m_child[0]->is_constant()) {
+                    th.m_cons1 = t->m_child[0];
+                    th.m_1 = true;
+                    if(t->m_child[1]->m_token.GetType() != token_enum::OperatorC)
+                        break;
+                    if(t->m_child[1]->m_child[0]->is_constant()){
+                        th.m_cons2 = t->m_child[1]->m_child[0];
+                        th.m_var1  = t->m_child[1]->m_child[1];
+                        th.m_2 = t->m_token.GetOpType() == operator_type::OP_plus;
+                        th.m_3 = t->m_token.GetOpType() == t->m_child[1]->m_token.GetOpType();
+                        t->m_child[1]->m_child[0] = nullptr;
+                        t->m_child[1]->m_child[1] = nullptr;
+                        delete t->m_child[1];
+                    } else if (t->m_child[1]->m_child[1]->is_constant()){
+                        th.m_cons2 = t->m_child[1]->m_child[1];
+                        th.m_var1  = t->m_child[1]->m_child[0];
+                        th.m_3 = t->m_token.GetOpType() == operator_type::OP_plus;
+                        th.m_2 = t->m_token.GetOpType() == t->m_child[1]->m_token.GetOpType();
+                        t->m_child[1]->m_child[0] = nullptr;
+                        t->m_child[1]->m_child[1] = nullptr;
+                        delete t->m_child[1];
+                    } else break;
+                } else if (t->m_child[1]->is_constant()) {
+                    th.m_cons1 = t->m_child[1];
+                    th.m_1 = t->m_token.GetOpType() == operator_type::OP_plus;
+                    if(t->m_child[0]->m_token.GetType() != token_enum::OperatorC)
+                        break;
+                    if(t->m_child[0]->m_child[0]->is_constant()){
+                        th.m_cons2 = t->m_child[0]->m_child[0];
+                        th.m_var1  = t->m_child[0]->m_child[1];
+                        th.m_2 = true;
+                        th.m_3 = t->m_child[0]->m_token.GetOpType() == operator_type::OP_plus;
+                        t->m_child[0]->m_child[0] = nullptr;
+                        t->m_child[0]->m_child[1] = nullptr;
+                        delete t->m_child[0];
+                    } else if (t->m_child[0]->m_child[1]->is_constant()){
+                        th.m_cons2 = t->m_child[0]->m_child[1];
+                        th.m_var1  = t->m_child[0]->m_child[0];
+                        th.m_3 = true;
+                        th.m_2 = t->m_child[0]->m_token.GetOpType() == operator_type::OP_plus;
+                        t->m_child[0]->m_child[0] = nullptr;
+                        t->m_child[0]->m_child[1] = nullptr;
+                        delete t->m_child[0];
+                    } else break;
+                } else break;
+                if(th.m_1 == th.m_2)
+                    aux1 = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorC, operator_type::OP_plus), Operand_type::Binary, 
+                            th.m_cons1, th.m_cons2);
+                else if (th.m_1 == true)
+                    aux1 = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorC, operator_type::OP_minus), Operand_type::Binary, 
+                            th.m_cons1, th.m_cons2);
+                else
+                    aux1 = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorC, operator_type::OP_minus), Operand_type::Binary, 
+                            th.m_cons2, th.m_cons1);
+                if(th.m_3 && (th.m_1 || th.m_2)) t->m_token.m_op_type = operator_type::OP_plus;
+                else t->m_token.m_op_type = operator_type::OP_minus;
+                aux3 = __IMM__(this->Eval(aux1));
+                delete aux1;
+                if(th.m_3 == true){
+                    t->m_child[0] = th.m_var1;
+                    t->m_child[1] = aux3;
+                    aux1 = nullptr;
+                } else {
+                    t->m_child[1] = th.m_var1;
+                    t->m_child[0] = aux3;
+                    aux1 = nullptr;
+                }
+                this->simplified_ast(t);
+                break; //}
+        } //}
+        return t;
+    } //}
 
     void clean_current_ast() {
         if(nullptr != this->m_current_ast) delete this->m_current_ast;

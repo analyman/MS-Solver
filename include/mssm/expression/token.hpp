@@ -3,6 +3,7 @@
 /*
  * tokenize a string stream, the result is a stream of token.
  */
+#include "../utils/exception.hpp"
 
 #include<map>
 #include<vector>
@@ -15,19 +16,13 @@
 #include<exception>
 #include<cmath>
 
-class TokenizeException //{
-{
-    private:
-        std::string msg;
-    public:
-        TokenizeException(const std::string& _s): msg(_s){}
-        TokenizeException(std::string&& _s): msg(std::move(_s)){}
-        TokenizeException(const char* _c_str): msg(_c_str){}
-
-        virtual const char * what() const noexcept {return msg.c_str();}
-}; //}
-
 namespace MathExpr {
+
+class TokenizeException: public SMSolver::SMSolverException {
+    public:
+    TokenizeException(const char*        s): SMSolver::SMSolverException(s){}
+    TokenizeException(const std::string& s): SMSolver::SMSolverException(s){}
+};
 
 extern const char* alpha_num;
 extern const char* __num_dot;
@@ -77,7 +72,9 @@ class Token //{
         typedef size_t           PosType;
     private:
         template<typename T>
-        friend std::ostream& operator_out_aux(std::ostream&, const APT<T>&);
+            friend std::ostream& operator_out_aux(std::ostream&, const APT<T>&);
+        template<typename T>
+            friend class MathExprEvalS;
         IdType        m_id;
         token_enum    m_token_type;
         operator_type m_op_type;
@@ -308,6 +305,10 @@ class Tokenizer  //{
 
         TokenIterator begin(){return TokenIterator(this);};
         TokenIterator end(){return TokenIterator();};
+
+        inline IdType new_imm (const ValType& val){this->m_immediate_map[++m_allocated_id] = val; return this->m_allocated_id;}
+        inline IdType new_func(const std::string& f_name){this->m_func_map[++m_allocated_id] = f_name; return this->m_allocated_id;}
+        inline IdType inc_allocated_id(){return ++m_allocated_id;}
 }; //}
 
 template<typename T>
@@ -396,7 +397,7 @@ inline bool Tokenizer<T>::next(Token& _out) //{
             if(p == std::string::npos) p = m_parse_str.length();
             SizeType s = m_parse_str.find_first_of(".", m_pointer);
             SizeType e = m_parse_str.find_first_of(".", s + 1);
-            if(e != std::string::npos && e <= p) 
+            if(s != std::string::npos && e != std::string::npos && e <= p) 
                 throw *new TokenizeException("uncorrect number: " + m_parse_str.substr(m_pointer, p - m_pointer));
             _out = MathExpr::Token(++m_allocated_id, MathExpr::token_enum::ImmediateValue);
             _out.GetPos() = m_pointer;
@@ -411,6 +412,7 @@ inline bool Tokenizer<T>::next(Token& _out) //{
 
 extern template class FunctionMap<double>;
 extern template class Tokenizer<double>;
+
 }
 
 #endif // _TOKEN_HPP

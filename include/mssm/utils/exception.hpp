@@ -6,13 +6,14 @@
 
 namespace SMSolver {
 
-struct SMSolverException: std::exception{
-    private:
-        const char* msg;
+struct SMSolverException: std::exception {
+    protected:
+        const std::string msg;
     public:
-        SMSolverException(std::string& s):msg(s.c_str()){}
-        SMSolverException(const char* s):msg(s){}
-        virtual const char* what() const noexcept {return msg;}
+        SMSolverException(std::string&& s):      msg(s){}
+        SMSolverException(const std::string& s): msg(s){}
+        SMSolverException(const char* s):        msg(s){}
+        virtual const char* what() const noexcept {return msg.c_str();}
 };
 
 }

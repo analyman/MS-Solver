@@ -1,7 +1,7 @@
 CXX      = g++
 CC       = gcc
-CFLAGS   = -g -O0 -Wl
-CXXFLAG  = $(CFLAGS) -std=c++14
+CFLAGS   = -g -O0 -Wall
+CXXFLAGS = $(CFLAGS) -std=c++14
 LFLAGS   = -L../ -lsmms
 DYN_LIBS = ../libsmms.so
 

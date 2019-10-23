@@ -2,6 +2,7 @@
 #define _EXPR_PARSE_TREE_HPP
 
 #include "token.hpp"
+#include "../utils/exception.hpp"
 #include <cassert>
 #include <cstring>
 #include <cstdlib>
@@ -9,21 +10,16 @@
 
 namespace MathExpr {
 
-class parseTreeException //{
-{
-    private:
-        std::string msg;
+class parseTreeException: public SMSolver::SMSolverException {
     public:
-        parseTreeException(std::string& _s): msg(_s){}
-        parseTreeException(std::string&& _s): msg(std::move(_s)){}
-        parseTreeException(char* _c_str): msg(_c_str){}
-
-        virtual const char * what() const noexcept {return msg.c_str();}
-}; //}
+        parseTreeException(const char*        s): SMSolverException(s){}
+        parseTreeException(const std::string& s): SMSolverException(s){}
+};
 
 template<typename T> class APT;
 template<typename T>
 std::ostream& operator_out_aux(std::ostream& o_s, const APT<T>& t);
+template<typename T> class MathExprEvalS;
 
 template<typename T> T t_pow(const T&, const T&){return T(0);}
 template<> double t_pow(const double& a, const double& b){return ::pow(a, b);}
@@ -45,6 +41,8 @@ class APT //{
 
     private:
         friend std::ostream& operator_out_aux<T>(std::ostream&, const APT<T>&);
+        template<typename U> 
+        friend class MathExprEvalS;
         APT*           m_child[3];
         token_type     m_token;
         Operand_type   m_operand_type;
@@ -54,62 +52,265 @@ class APT //{
 
         void init_result(){m_isvalid = false; m_result_id = 0;}
 
+        APT(): m_operand_type(Operand_type::Leaf){}
+
     public:
-        APT() = delete;
         APT(const token_type& token, const Operand_type& t): //{
             m_token(token), m_operand_type(t){
                 assert(this->m_operand_type == Operand_type::Leaf);
                 ::memset(m_child, '\0', 3 * sizeof(APT*));
+            } //}
+    APT(const token_type& token, const Operand_type& t, APT* op1): //{
+        m_token(token), m_operand_type(t){
+            assert(this->m_operand_type == Operand_type::Unary);
+            ::memset(m_child, '\0', 3 * sizeof(APT*));
+            m_child[0] = op1;
         } //}
-        APT(const token_type& token, const Operand_type& t, APT* op1): //{
-            m_token(token), m_operand_type(t){
-                assert(this->m_operand_type == Operand_type::Unary);
-                ::memset(m_child, '\0', 3 * sizeof(APT*));
-                m_child[0] = op1;
+    APT(const token_type& token, const Operand_type& t, APT* op1, APT* op2): //{
+        m_token(token), m_operand_type(t){
+            assert(this->m_operand_type == Operand_type::Binary);
+            ::memset(m_child, '\0', 3 * sizeof(APT*));
+            m_child[0] = op1;
+            m_child[1] = op2;
         } //}
-        APT(const token_type& token, const Operand_type& t, APT* op1, APT* op2): //{
-            m_token(token), m_operand_type(t){
-                assert(this->m_operand_type == Operand_type::Binary);
-                ::memset(m_child, '\0', 3 * sizeof(APT*));
-                m_child[0] = op1;
-                m_child[1] = op2;
+    APT(const token_type& token, const Operand_type& t, APT* op1, APT* op2, APT* op3): //{
+        m_token(token), m_operand_type(t){
+            assert(this->m_operand_type == Operand_type::Ternary);
+            ::memset(m_child, '\0', 3 * sizeof(APT*));
+            m_child[0] = op1;
+            m_child[1] = op2;
+            m_child[2] = op3;
         } //}
-        APT(const token_type& token, const Operand_type& t, APT* op1, APT* op2, APT* op3): //{
-            m_token(token), m_operand_type(t){
-                assert(this->m_operand_type == Operand_type::Ternary);
-                ::memset(m_child, '\0', 3 * sizeof(APT*));
-                m_child[0] = op1;
-                m_child[1] = op2;
-                m_child[2] = op3;
-        } //}
-        ~APT() //{
-        {
-            switch(this->m_operand_type){
-                case Operand_type::Leaf:
-                    break;
-                case Operand_type::Unary:
-                    delete m_child[0];
-                    break;
-                case Operand_type::Binary:
-                    delete m_child[0];
-                    delete m_child[1];
-                    break;
-                case Operand_type::Ternary:
-                    delete m_child[0];
-                    delete m_child[1];
-                    delete m_child[2];
-                    break;
-            }
-        } //}
+    ~APT() //{
+    {
+        switch(this->m_operand_type){
+            case Operand_type::Leaf:
+                break;
+            case Operand_type::Unary:
+                if(m_child[0] != nullptr) delete m_child[0];
+                break;
+            case Operand_type::Binary:
+                if(m_child[0] != nullptr) delete m_child[0];
+                if(m_child[1] != nullptr) delete m_child[1];
+                break;
+            case Operand_type::Ternary:
+                if(m_child[0] != nullptr) delete m_child[0];
+                if(m_child[1] != nullptr) delete m_child[1];
+                if(m_child[2] != nullptr) delete m_child[2];
+                break;
+        }
+    } //}
+    APT(const APT& _o): m_operand_type(Operand_type::Leaf){*this = _o;}
+    APT(APT&& _o): m_operand_type(Operand_type::Leaf)     {*this = std::move(_o);}
+
+    APT& operator=(const APT& _o) //{
+    {
+        if(this == &_o) return *this;
+        switch(this->m_operand_type){
+            case Operand_type::Leaf   :  break;
+            case Operand_type::Unary  :  delete m_child[0]; break;
+            case Operand_type::Binary :  delete m_child[0]; delete m_child[1]; break;
+            case Operand_type::Ternary:  delete m_child[0]; delete m_child[1]; delete m_child[2]; break;
+        }
+        m_child[0] = nullptr;
+        m_child[1] = nullptr;
+        m_child[2] = nullptr;
+        this->m_token        = _o.m_token;
+        this->m_parent       = _o.m_parent;
+        this->m_operand_type = _o.m_operand_type;
+        this->m_isvalid      = _o.m_isvalid;
+        this->m_result_id    = _o.m_result_id;
+        switch(this->m_operand_type){
+            case Operand_type::Leaf   :  break;
+            case Operand_type::Unary  :  m_child[0] = new APT(); *m_child[0] = *_o.m_child[0]; break;
+            case Operand_type::Binary :  m_child[0] = new APT(); *m_child[0] = *_o.m_child[0];
+                                         m_child[1] = new APT(); *m_child[1] = *_o.m_child[1]; break;
+            case Operand_type::Ternary:  m_child[0] = new APT(); *m_child[0] = *_o.m_child[0];
+                                         m_child[1] = new APT(); *m_child[1] = *_o.m_child[1];
+                                         m_child[2] = new APT(); *m_child[2] = *_o.m_child[2]; break;
+        }
+        return *this;
+    } //}
+    APT& operator=(APT&& _o) //{
+    {
+        if(this == &_o) return *this;
+        switch(this->m_operand_type){
+            case Operand_type::Leaf   :  break;
+            case Operand_type::Unary  :  delete m_child[0]; break;
+            case Operand_type::Binary :  delete m_child[0]; delete m_child[1]; break;
+            case Operand_type::Ternary:  delete m_child[0]; delete m_child[1]; delete m_child[2]; break;
+        }
+        m_child[0] = nullptr;
+        m_child[1] = nullptr;
+        m_child[2] = nullptr;
+        this->m_token        = _o.m_token;
+        this->m_parent       = _o.m_parent;
+        this->m_operand_type = _o.m_operand_type;
+        this->m_isvalid      = _o.m_isvalid;
+        this->m_result_id    = _o.m_result_id;
+        switch(this->m_operand_type){
+            case Operand_type::Leaf   :  break;
+            case Operand_type::Unary  :  m_child[0] = _o.m_child[0]; break;
+            case Operand_type::Binary :  m_child[0] = _o.m_child[0];
+                                         m_child[1] = _o.m_child[1]; break;
+            case Operand_type::Ternary:  m_child[0] = _o.m_child[0];
+                                         m_child[1] = _o.m_child[1];
+                                         m_child[2] = _o.m_child[2]; break;
+        }
+        _o.m_operand_type = Operand_type::Leaf;
+        return *this;
+    } //}
 
         APT*& GetParent(){return this->m_parent;}
         Token& GetToken(){return this->m_token;}
 
-        template<typename V>
+        bool decsendants_has_id(Token::IdType id) //{
+        {
+            if(this->m_token.GetId() == id){
+                if(this->m_token.GetType() == token_enum::Id)
+                    return true;
+                else 
+                    return false;
+            }
+            switch(this->m_token.GetType()){
+                case token_enum::OperatorA:
+                case token_enum::OperatorB:
+                case token_enum::OperatorC:
+                    return this->m_child[0]->decsendants_has_id(id) || 
+                           this->m_child[1]->decsendants_has_id(id);
+                case token_enum::OperatorD:
+                    return this->m_child[1]->decsendants_has_id(id);
+                case token_enum::Function:
+                    switch(this->m_operand_type){
+                        case Operand_type::Leaf:
+                            return false;
+                        case Operand_type::Unary:
+                            return this->m_child[0]->decsendants_has_id(id); 
+                        case Operand_type::Binary:
+                            return this->m_child[0]->decsendants_has_id(id) || 
+                                   this->m_child[1]->decsendants_has_id(id);
+                        case Operand_type::Ternary:
+                            return this->m_child[0]->decsendants_has_id(id) || 
+                                   this->m_child[1]->decsendants_has_id(id) ||
+                                   this->m_child[2]->decsendants_has_id(id);
+                    }
+                default:
+                    return false;
+            }
+            return false;
+        } //}
+        template<typename U>
+        bool decsendants_has_id(const std::string& id, U& idmap) //{
+        {
+            if(idmap[this->m_token.GetId()] == id && id != ""){
+                if(this->m_token.GetType() == token_enum::Id)
+                    return true;
+                else 
+                    return false;
+            }
+            switch(this->m_token.GetType()){
+                case token_enum::OperatorA:
+                case token_enum::OperatorB:
+                case token_enum::OperatorC:
+                    return this->m_child[0]->decsendants_has_id(id, idmap) || 
+                           this->m_child[1]->decsendants_has_id(id, idmap);
+                case token_enum::OperatorD:
+                    return this->m_child[1]->decsendants_has_id(id, idmap);
+                case token_enum::Function:
+                    switch(this->m_operand_type){
+                        case Operand_type::Leaf:
+                            return false;
+                        case Operand_type::Unary:
+                            return this->m_child[0]->decsendants_has_id(id, idmap); 
+                        case Operand_type::Binary:
+                            return this->m_child[0]->decsendants_has_id(id, idmap) || 
+                                   this->m_child[1]->decsendants_has_id(id, idmap);
+                        case Operand_type::Ternary:
+                            return this->m_child[0]->decsendants_has_id(id, idmap) || 
+                                   this->m_child[1]->decsendants_has_id(id, idmap) ||
+                                   this->m_child[2]->decsendants_has_id(id, idmap);
+                    }
+                default:
+                    return false;
+            }
+            return false;
+        } //}
+
+    bool is_constant() //{
+    {
+        switch(this->m_token.GetType()){
+            case token_enum::OperatorA:
+            case token_enum::OperatorB:
+            case token_enum::OperatorC:
+            case token_enum::OperatorD:
+                return this->m_child[0]->is_constant() && 
+                    this->m_child[1]->is_constant();
+            case token_enum::Function:
+                switch(this->m_operand_type){
+                    case Operand_type::Leaf:
+                        return true;
+                    case Operand_type::Unary:
+                        return this->m_child[0]->is_constant(); 
+                    case Operand_type::Binary:
+                        return this->m_child[0]->is_constant() && 
+                            this->m_child[1]->is_constant();
+                    case Operand_type::Ternary:
+                        return this->m_child[0]->is_constant() &&
+                            this->m_child[1]->is_constant() &&
+                            this->m_child[2]->is_constant();
+                }
+            case token_enum::Id: return false;
+            default:
+                return true;
+        }
+    } //}
+
+    void clear_children() //{
+    {
+        switch(this->m_operand_type){
+            case Operand_type::Leaf:
+                break;
+            case Operand_type::Unary:
+                delete this->m_child[0]; break;
+            case Operand_type::Binary:
+                delete this->m_child[0];
+                delete this->m_child[1]; break;
+            case Operand_type::Ternary:
+                delete this->m_child[0];
+                delete this->m_child[1];
+                delete this->m_child[2]; break;
+        }
+        this->m_child[0]     = nullptr;
+        this->m_child[1]     = nullptr;
+        this->m_child[2]     = nullptr;
+        this->m_operand_type = Operand_type::Leaf;
+    } //}
+
+    void fix_parent(APT<token_type>* p_ptr = nullptr){
+        this->m_parent = p_ptr;
+        switch(this->m_operand_type){
+            case Operand_type::Leaf:
+                break;
+            case Operand_type::Unary:
+                this->m_child[0]->fix_parent(this);
+                break;
+            case Operand_type::Binary:
+                this->m_child[0]->fix_parent(this);
+                this->m_child[1]->fix_parent(this);
+                break;
+            case Operand_type::Ternary:
+                this->m_child[0]->fix_parent(this);
+                this->m_child[1]->fix_parent(this);
+                this->m_child[2]->fix_parent(this);
+                break;
+        }
+    }
+
+    template<typename V>
         V EvalSyntaxTree(typename MathExpr::Tokenizer<V>::ContextType&      _context,
-                         typename MathExpr::Tokenizer<V>::IdMapType&        _idMap,
-                         typename MathExpr::Tokenizer<V>::FuncMapType&      _funcMap,
-                         typename MathExpr::Tokenizer<V>::ImmediateMapType& _immMap) //{
+                typename MathExpr::Tokenizer<V>::IdMapType&        _idMap,
+                typename MathExpr::Tokenizer<V>::FuncMapType&      _funcMap,
+                typename MathExpr::Tokenizer<V>::ImmediateMapType& _immMap) //{
         {
             FunctionMap<V>& FGET = FunctionMap<V>::FMap;
             const Token& t = this->m_token;

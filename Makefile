@@ -23,7 +23,7 @@ endif
 LATEXDOC:=./doc/LaTeX/solverdoc.tex
 
 TOPDIR    := $(PWD)
-libsrc    := src/expression/expression.cpp src/matrix/matrix.cpp src/model/model.cpp
+libsrc    := $(shell find ./src \( -type f \) -regex ".*\.\(cpp\|c\|cxx\|cx\)")
 lib       := libsmms.so
 outputDIR := build_dir
 objfile   := $(patsubst %.cpp,$(outputDIR)/%.o,$(shell echo $(libsrc) | grep -oe "[0-z]*\.cpp"))
