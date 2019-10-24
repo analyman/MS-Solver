@@ -308,6 +308,7 @@ class Tokenizer  //{
 
         inline IdType new_imm (const ValType& val){this->m_immediate_map[++m_allocated_id] = val; return this->m_allocated_id;}
         inline IdType new_func(const std::string& f_name){this->m_func_map[++m_allocated_id] = f_name; return this->m_allocated_id;}
+        inline IdType new_id  (const std::string& id){this->m_id_map[++m_allocated_id] = id; return this->m_allocated_id;}
         inline IdType inc_allocated_id(){return ++m_allocated_id;}
 }; //}
 

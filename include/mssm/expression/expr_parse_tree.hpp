@@ -286,7 +286,8 @@ class APT //{
         this->m_operand_type = Operand_type::Leaf;
     } //}
 
-    void fix_parent(APT<token_type>* p_ptr = nullptr){
+    void fix_parent(APT<token_type>* p_ptr = nullptr) //{
+    {
         this->m_parent = p_ptr;
         switch(this->m_operand_type){
             case Operand_type::Leaf:
@@ -304,7 +305,7 @@ class APT //{
                 this->m_child[2]->fix_parent(this);
                 break;
         }
-    }
+    } //}
 
     template<typename V>
         V EvalSyntaxTree(typename MathExpr::Tokenizer<V>::ContextType&      _context,

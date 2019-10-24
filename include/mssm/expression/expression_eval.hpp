@@ -735,6 +735,189 @@ class MathExprEvalS: public MathExprEval<T> //{
                 throw *new ParseXException("helper_derivative_of(): unexcepted exception.");
         }
     } //}
+#define __ID__(_id) new APT<Token>(Token(this->m_tokenizer.new_id(_id), token_enum::Id), Operand_type::Leaf)
+#define _HAS_ID(t) (t->decsendants_has_id(_id, this->m_tokenizer.GetIdMap()))
+    // basic integral sin(x), cos(x), a^x, x^n
+    APT<Token>* helper_integral_of(const std::string& _id, APT<Token>* t = nullptr) //{
+    {
+        FuncMapType&      fmap  = this->m_tokenizer.GetFuncMap();
+        if(t == nullptr) t = this->m_current_ast;
+        APT<Token> *aux1 = nullptr, *aux2 = nullptr, *aux3 = nullptr, *aux4 = nullptr,  *ret_ast = nullptr;
+        if(!_HAS_ID(t)){
+            aux1 = __ID__(_id);
+            aux2 = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                    Operand_type::Binary, new APT<Token>(*t), aux1);
+            return aux2;
+        }
+        switch(t->m_token.GetType()) //{
+        {
+            case token_enum::OperatorA: // a^x, x^a
+                if(_HAS_ID(t->m_child[0])){ // x^a
+                    if(_HAS_ID(t->m_child[1]))
+                        throw *new ParseXException("expression is too complex to integral: <^>");
+                    aux1 = new APT<Token>(*t->m_child[1]);
+                    if(aux1->is_constant() && this->Eval(aux1) == -1) { //x^-1
+                        delete aux1;
+                        aux1 = __IMM__(1);
+                        aux2 = new APT<Token>(*t->m_child[0]);
+                        aux1 = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_div),
+                                Operand_type::Binary, aux1, aux2);
+                        ret_ast = this->integral_of(_id, aux1);
+                        delete aux1;
+                        break;
+                    }
+                    aux3 = __IMM__(1);
+                    aux1 = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorC, operator_type::OP_plus),
+                            Operand_type::Binary, aux1, aux3); // n+1
+                    aux2 = this->derivative_of(_id, t->m_child[0]); // x'
+                    if(!aux2->is_constant())
+                        throw *new ParseXException("expression is too complex to integral: <f(x)^>");
+                    aux3 = new APT<Token>(*aux1); // n+1
+                    aux2 = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                            Operand_type::Binary, aux2, aux3); // (n+1)x'
+                    aux3 = __IMM__(1);
+                    aux2 = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_div),
+                            Operand_type::Binary, aux3, aux2); // 1/(n+1)x'
+                    aux3 = new APT<Token>(*t->m_child[0]);
+                    aux3 = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorA, operator_type::OP_pow),
+                            Operand_type::Binary, aux3, aux1); // x^(n+1)
+                    ret_ast = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                            Operand_type::Binary, aux2, aux3);
+                    aux1 = nullptr; aux2 = nullptr; aux3 = nullptr;
+                    break;
+                } else { // a^x
+                    aux1 = new APT<Token>(*t->m_child[0]); // a
+                    aux1 = new APT<Token>(Token(this->m_tokenizer.new_func("log"), token_enum::Function, operator_type::OP_NONE),
+                            Operand_type::Unary, aux1); // log(a)
+                    aux2 = this->derivative_of(_id, t->m_child[1]); // x'
+                    if(!aux2->is_constant())
+                        throw *new ParseXException("expression is too complex to integral: <f(x)^>");
+                    aux2 = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                            Operand_type::Binary, aux2, aux1); // log(a)x'
+                    aux3 = __IMM__(1);
+                    aux2 = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_div),
+                            Operand_type::Binary, aux3, aux2); // 1/(log(a)x')
+                    aux3 = new APT<Token>(*t);
+                    ret_ast = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                            Operand_type::Binary, aux2, aux3);
+                    aux1 = nullptr; aux2 = nullptr; aux3 = nullptr;
+                    break;
+                }
+            case token_enum::OperatorB:
+                if(_HAS_ID(t->m_child[0])){
+                    if(_HAS_ID(t->m_child[1]))
+                        throw *new ParseXException("expression is too complex to integral: <*> or </>");
+                    aux1 = new APT<Token>(*t->m_child[1]);
+                    aux2 = this->helper_integral_of(_id, t->m_child[0]);
+                    ret_ast = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, t->m_token.GetOpType()),
+                            Operand_type::Binary, aux2, aux1);
+                    break;
+                } else {
+                    if(t->m_token.GetOpType() == operator_type::OP_time){
+                        aux1 = new APT<Token>(*t->m_child[0]);
+                        aux2 = this->helper_integral_of(_id, t->m_child[1]);
+                        ret_ast = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, t->m_token.GetOpType()),
+                                Operand_type::Binary, aux1, aux2);
+                        break;
+                    } else {
+                        this->simplified_ast(t);
+                        if(t->m_child[1]->m_token.GetType() == token_enum::OperatorA){
+                            aux1 = new APT<Token>(*t->m_child[0]);
+                            aux2 = new APT<Token>(*t->m_child[1]->m_child[0]);
+                            aux3 = new APT<Token>(*t->m_child[1]->m_child[1]);
+                            if(!aux3->is_constant())
+                                throw *new ParseXException("expression is too complex to integral: </f(x)>");
+                            aux4 = __IMM__(0);
+                            aux3 = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorC, operator_type::OP_minus),
+                                    Operand_type::Binary, aux4, aux3);
+                            aux2 = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorA, operator_type::OP_pow),
+                                    Operand_type::Binary, aux2, aux3);
+                            aux1 = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                                    Operand_type::Binary, aux1, aux2);
+                            ret_ast = this->integral_of(_id, aux1);
+                            delete aux1;
+                            break;
+                        }
+                        aux1 = this->derivative_of(_id, t->m_child[1]);
+                        if(!aux1->is_constant())
+                            throw *new ParseXException("expression is too complex to integral: </f(x)>");
+                        aux2 = new APT<Token>(*t->m_child[0]);
+                        aux3 = new APT<Token>(*t->m_child[1]);
+                        aux3 = new APT<Token>(Token(this->m_tokenizer.new_func("log"), token_enum::Function, operator_type::OP_NONE),
+                                Operand_type::Unary, aux3);
+                        aux1 = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_div),
+                                Operand_type::Binary, aux2, aux1);
+                        ret_ast = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                                Operand_type::Binary, aux1, aux3);
+                        break;
+                    }
+                }
+            case token_enum::OperatorC:
+                aux2 = this->helper_integral_of(_id, t->m_child[0]);
+                aux3 = this->helper_integral_of(_id, t->m_child[1]);
+                ret_ast = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorC, t->m_token.GetOpType()),
+                        Operand_type::Binary, aux2, aux3);
+                break;
+            case token_enum::OperatorD:
+                if(_HAS_ID(t->m_child[0]))
+                    throw *new ParseXException("assignment in integral.");
+                ret_ast = this->helper_integral_of(_id, t->m_child[1]);
+                break;
+            case token_enum::Function:
+                if (fmap[t->m_token.m_id] == "sin") {
+                    aux1 = this->derivative_of(_id, t->m_child[0]);
+                    if(!aux1->is_constant())
+                        throw *new ParseXException("expression is too complex to integral: <f(g(x))>");
+                    aux3 = __IMM__(0);
+                    aux1 = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorC, operator_type::OP_minus), 
+                            Operand_type::Binary, aux3, aux1);
+                    aux2 = new APT<Token>(Token(this->m_tokenizer.new_func("cos"), token_enum::Function), Operand_type::Unary, new APT<Token>(*t->m_child[0]));
+                    ret_ast = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_div),
+                            Operand_type::Binary, aux2, aux1);
+                } else if (fmap[t->m_token.m_id] == "cos") {
+                    aux1 = this->derivative_of(_id, t->m_child[0]);
+                    if(!aux1->is_constant())
+                        throw *new ParseXException("expression is too complex to integral: <f(g(x))>");
+                    aux2 = new APT<Token>(Token(this->m_tokenizer.new_func("sin"), token_enum::Function), Operand_type::Unary, new APT<Token>(*t->m_child[0]));
+                    ret_ast = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_div),
+                            Operand_type::Binary, aux2, aux1);
+                } else if (fmap[t->m_token.m_id] == "sinh") {
+                    aux1 = this->derivative_of(_id, t->m_child[0]);
+                    if(!aux1->is_constant())
+                        throw *new ParseXException("expression is too complex to integral: <f(g(x))>");
+                    aux2 = new APT<Token>(Token(this->m_tokenizer.new_func("cosh"), token_enum::Function), Operand_type::Unary, new APT<Token>(*t->m_child[0]));
+                    ret_ast = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_div),
+                            Operand_type::Binary, aux2, aux1);
+                } else if (fmap[t->m_token.m_id] == "cosh") {
+                    aux1 = this->derivative_of(_id, t->m_child[0]);
+                    if(!aux1->is_constant())
+                        throw *new ParseXException("expression is too complex to integral: <f(g(x))>");
+                    aux2 = new APT<Token>(Token(this->m_tokenizer.new_func("sinh"), token_enum::Function), Operand_type::Unary, new APT<Token>(*t->m_child[0]));
+                    ret_ast = new APT<Token>(
+                            Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_div),
+                            Operand_type::Binary, aux2, aux1);
+                }
+                break;
+            case token_enum::Id:
+                aux1 = new APT<Token>(*t);
+                aux2 = __IMM__(2);
+                aux3 = __IMM__(0.5);
+                aux1 = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorA, operator_type::OP_pow),
+                        Operand_type::Binary, aux1, aux2);
+                ret_ast = new APT<Token>(Token(this->m_tokenizer.inc_allocated_id(), token_enum::OperatorB, operator_type::OP_time),
+                        Operand_type::Binary, aux3, aux1);
+                break;
+            case token_enum::ImmediateValue:
+            case token_enum::Delimiter:
+            case token_enum::LP:
+            case token_enum::RP:
+                throw *new parseTreeException("IMPOSSIBLE...");
+        } //}
+        return ret_ast;
+    } //}
 
     public:
     MathExprEvalS(const std::string& str): MathExprEval<ValType>(str), m_current_ast(nullptr), m_context(){this->m_current_ast = this->GetParseTree();}
@@ -1104,6 +1287,11 @@ class MathExprEvalS: public MathExprEval<T> //{
                 break; //}
         } //}
         return t;
+    } //}
+
+    APT<Token>* integral_of(const std::string& _id, APT<Token>* t = nullptr) //{
+    {
+        return this->simplified_ast(helper_integral_of(_id, t));
     } //}
 
     void clean_current_ast() {

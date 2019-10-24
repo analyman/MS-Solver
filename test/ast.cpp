@@ -47,7 +47,7 @@ void testD()
     double x = TC.Eval();
     TC.continue_with("y = sqrt(200) * 50", true);
     double y = TC.Eval();
-    TC.continue_with("x^3 / 6 + x^4 + x^5 / 20 / 30)", true);
+    TC.continue_with("sin(x^3 / 6 + x^4 + x^5 / 4 / 5) * cos(x)", true);
     APT<Token>* ddd = TC.derivative_of("x");
     APT<Token>* zzz = TC.derivative_of("x", ddd);
     std::string sss = TC.toString(ddd);
@@ -88,8 +88,8 @@ void testF()
     double x = TC.Eval();
     TC.continue_with("y = sqrt(200) * 50", true);
     double y = TC.Eval();
-    TC.continue_with("5*x^3 + x^4 + x^5 / (20 * 30)", true);
-    APT<Token>* ddd = TC.derivative_of("x");
+    TC.continue_with("1 / x^2 + x^(0-1)", true);
+    APT<Token>* ddd = TC.integral_of("x");
     std::string sss = TC.toString(ddd);
     double k = TC.Eval(ddd);
     delete ddd;
@@ -106,6 +106,6 @@ void testF()
 
 int main()
 {
-    testD();
+    testF();
     return 0;
 }
