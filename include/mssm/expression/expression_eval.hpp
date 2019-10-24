@@ -737,6 +737,7 @@ class MathExprEvalS: public MathExprEval<T> //{
     } //}
 #define __ID__(_id) new APT<Token>(Token(this->m_tokenizer.new_id(_id), token_enum::Id), Operand_type::Leaf)
 #define _HAS_ID(t) (t->decsendants_has_id(_id, this->m_tokenizer.GetIdMap()))
+#define __IMM__(x) new APT<Token>(Token(this->m_tokenizer.new_imm(x), token_enum::ImmediateValue), Operand_type::Leaf)
     // basic integral sin(x), cos(x), a^x, x^n
     APT<Token>* helper_integral_of(const std::string& _id, APT<Token>* t = nullptr) //{
     {
@@ -1015,7 +1016,6 @@ class MathExprEvalS: public MathExprEval<T> //{
 
         // x + 0, x - 0, x * 0, 0 / x, x^0 etc.
         // x*1, x/1, x^1 etc.
-#define __IMM__(x) new APT<Token>(Token(this->m_tokenizer.new_imm(x), token_enum::ImmediateValue), Operand_type::Leaf)
 #define _IMM_(x)  (aux2 = __IMM__(x)); delete aux2; aux2 = nullptr;
 #define _IMM_ZERO _IMM_(0)
 #define _IMM_ONE  _IMM_(1)
