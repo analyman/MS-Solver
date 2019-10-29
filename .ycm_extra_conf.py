@@ -4,7 +4,11 @@ import os
 import ycm_core
 import copy
 
-DEBUG = 0
+if os.getenv("YCM_EXTRA_CONF_DEBUG"):
+    DEBUG = True
+else:
+    DEBUG = False
+
 c_language = 0
 
 if platform.system() == "Windows":
@@ -21,7 +25,7 @@ def append_to_ycm_compilation_log_file(args):
         for k, v in args.items():
             append_file.write(
                 "{0:<25s}:  {1:<s}\n".format(k.__str__(), v.__str__()))
-            append_file.write("\n")
+        append_file.write("\n")
 
 
 def debug_here():
@@ -124,9 +128,6 @@ def msvc_path():
     return None
 
 
-windows_header_folder = [msvc_path()]
-
-
 default_c_flags = common_clang_flags + [
     '-x',
     'c',
@@ -136,7 +137,7 @@ default_c_flags = common_clang_flags + [
 default_cpp_flags = common_clang_flags + [
     '-x',
     'c++',
-    '-std=gnu++14'
+    '-std=gnu++11'
 ]
 
 linux_c_header_folder = copy.copy(common_linux_header_folder)
@@ -151,23 +152,27 @@ for folder in common_linux_header_folder:
                 if os.path.islink(folder + "/c++/" + _final_cpp):
                     linux_cpp_header_folder += [folder + "/c++/" + _final_cpp]
 
-if c_language:
-    flags = default_c_flags
-else:
-    flags = default_cpp_flags
 
-if platform.system() == "Windows":
-    append_include_ = windows_header_folder
-else:
-    if c_language:
-        append_include_ = linux_c_header_folder
+def GetFlags(is_cplusplus: bool = False):
+    if is_cplusplus:
+        flags = copy.copy(default_cpp_flags)
     else:
-        append_include_ = linux_cpp_header_folder
+        flags = copy.copy(default_c_flags)
 
-for _include_ in append_include_:
-    if _include_:
-        flags.append('-I')
-        flags.append(_include_)
+    if platform.system() == "Windows":
+        append_include_ = [msvc_path()]
+    else:
+        if is_cplusplus:
+            append_include_ = linux_cpp_header_folder
+        else:
+            append_include_ = linux_c_header_folder
+
+    for _include_ in append_include_:
+        if _include_:
+            flags.append('-I')
+            flags.append(_include_)
+    return flags
+
 
 compilation_database_folder = ''
 
@@ -212,13 +217,18 @@ if DEBUG:
          "common_clang_flags": common_clang_flags,
          "common_linux_header_folder": common_linux_header_folder,
          "default_c_flags": default_c_flags,
-         "default_cpp_flags": default_cpp_flags,
          "linux_c_header_folder": linux_c_header_folder,
          "linux_cpp_header_folder": linux_cpp_header_folder,
-         "windows_header_folder": windows_header_folder})
+         "default_cpp_flags": default_cpp_flags,
+         "windows_header_folder": [msvc_path()]})
 
 
 def Settings(**kwargs):
+    if kwargs["language"] != "cfamily":
+        return []
+    file_extension: str = os.path.splitext(kwargs["filename"])[1]
+    flags = GetFlags(file_extension in
+                     [".cpp", ".hpp", ".cx", ".cxx", ".hx", ".hxx", ".cc"])
     kwargs["flags"] = flags
     append_to_ycm_compilation_log_file(kwargs)
     if not database:
