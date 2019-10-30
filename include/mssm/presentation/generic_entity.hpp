@@ -1,6 +1,10 @@
 #ifndef GENERIC_ENTITY_HPP
 #define GENERIC_ENTITY_HPP
 
+#ifdef __WINDOWS__
+#include <d2d1.h>
+#endif
+
 #include "windows_helper.hpp"
 
 class DrawableEntity //{

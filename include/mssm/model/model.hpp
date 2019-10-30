@@ -4,6 +4,7 @@
 #include<vector>
 #include<stack>
 #include<algorithm>
+#include<tuple>
 
 #include<cstdlib>
 
@@ -31,8 +32,8 @@ namespace SMSolver{
     enum BasicSupport {FixedSupport, HingeSupport, NoneSupport};
     enum Connector {FixedConnect, HingeConnect, ElasticHingeConnect};
 
-    typedef u_int64_t NodeID;
-    typedef u_int64_t BeamID;
+    typedef uint64_t NodeID;
+    typedef uint64_t BeamID;
 
     /*
      * Node, basicly need contain location information.
@@ -673,9 +674,6 @@ smatrix<DT> getMetricRigidMetric() // don't consider Force //{
 } //}
 }; //} class tempalte SMSolverManager<T>
 
-extern template class SMSolverManager<double>;
-extern template class Beam<double>;
-extern template class Node<double>;
 } // namespace SMSolver
 
 #endif

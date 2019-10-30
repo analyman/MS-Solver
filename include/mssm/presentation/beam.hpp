@@ -20,7 +20,7 @@ private:
 
 public:
 	SMBeam(SMNode<value_type>& s, SMNode<value_type>& e, 
-           D_RGBColor<value_type> color = D_RGBColor<value_type>::black):
+           D_RGBColor<value_type> color = D_RGBColor<value_type>::blue):
 		m_start(s), m_end(e), m_color(color) {}
 
     beam_id& GetID(){return this->m_id;}
@@ -30,7 +30,7 @@ public:
 		if (target == nullptr || factory == nullptr) { return false; }
 		ID2D1SolidColorBrush* brush = nullptr;
 		if (!SUCCEEDED(target->CreateSolidColorBrush(this->m_color, &brush))) return false;
-		target->DrawLine(this->m_start, this->m_end, brush);
+		target->DrawLine(this->m_start, this->m_end, brush, 2.0f);
 		SafeReleaseX(&brush);
 		return true;
 	}
